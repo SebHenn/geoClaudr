@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>geoClaudr</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.css" />
+<style>
+  :root{
+    --bg:#0e1116; --panel:#171c24; --panel2:#1f2630; --line:#2b333f;
+    --txt:#eef2f7; --muted:#9aa7b6; --accent:#54c06e; --accent2:#3fa85c;
+    --gold:#ffd34e; --danger:#ff6b6b; --shadow:0 10px 30px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;width:100%;overflow:hidden;background:var(--bg);
+    color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  #app{position:fixed;inset:0}
+
+  /* ---------- Street view ---------- */
+  #pano{position:absolute;inset:0;background:#000}
+  .mapillary-attribution-container{font-size:10px !important}
+
+  /* ---------- Click-to-move cursor hint ---------- */
+  #moveCursor{position:absolute;z-index:520;pointer-events:none;display:none;
+    width:60px;height:60px;transform:translate(-50%,-50%)}
+  #moveCursor.show{display:block}
+  #moveCursor svg{width:100%;height:100%;filter:drop-shadow(0 2px 6px rgba(0,0,0,.55))}
+
+  /* ---------- Top HUD ---------- */
+  #hud{position:absolute;top:0;left:0;right:0;display:flex;gap:10px;align-items:center;
+    padding:10px 12px;pointer-events:none;z-index:500}
+  .hud-card{background:rgba(20,25,33,.82);backdrop-filter:blur(8px);border:1px solid var(--line);
+    border-radius:12px;padding:8px 12px;box-shadow:var(--shadow);pointer-events:auto}
+  .hud-stat{display:flex;flex-direction:column;line-height:1.05}
+  .hud-stat .k{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .hud-stat .v{font-size:17px;font-weight:700}
+  .hud-row{display:flex;gap:16px;align-items:center}
+  .spacer{flex:1}
+  .pill{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;
+    padding:3px 9px;white-space:nowrap}
+  .icon-btn{pointer-events:auto;cursor:pointer;border:1px solid var(--line);
+    background:rgba(20,25,33,.82);backdrop-filter:blur(8px);color:var(--txt);border-radius:12px;
+    padding:8px 12px;font-size:13px;font-weight:600;box-shadow:var(--shadow);display:flex;gap:6px;align-items:center}
+  .icon-btn:hover{border-color:var(--accent)}
+  .icon-btn:active{transform:translateY(1px)}
+
+  /* ---------- Guess panel ---------- */
+  #guessPanel{position:absolute;right:14px;bottom:14px;z-index:600;width:300px;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    box-shadow:var(--shadow);transition:width .18s ease,height .18s ease;display:flex;flex-direction:column}
+  #guessPanel .map-wrap{position:relative;width:100%;height:190px;transition:height .18s ease}
+  #guessMap{position:absolute;inset:0}
+  #guessPanel.expanded{width:min(680px,86vw)}
+  #guessPanel.expanded .map-wrap{height:min(460px,60vh)}
+  @media (hover:hover){
+    #guessPanel:hover{width:min(680px,86vw)}
+    #guessPanel:hover .map-wrap{height:min(460px,60vh)}
+  }
+  .panel-bar{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--panel2);
+    border-bottom:1px solid var(--line)}
+  .panel-bar .t{font-size:12px;color:var(--muted);flex:1}
+  .panel-bar .x{cursor:pointer;color:var(--muted);font-size:15px;padding:2px 6px;border-radius:8px}
+  .panel-bar .x:hover{color:var(--txt);background:rgba(255,255,255,.06)}
+  .btn{cursor:pointer;border:none;border-radius:10px;font-weight:800;letter-spacing:.02em;
+    padding:12px 14px;font-size:15px;color:#06210e;background:var(--accent);transition:filter .12s,transform .05s}
+  .btn:hover{filter:brightness(1.06)}
+  .btn:active{transform:translateY(1px)}
+  .btn[disabled]{background:#3a444f;color:#8a96a4;cursor:not-allowed;filter:none}
+  #guessBtn{margin:8px;border-radius:11px}
+
+  /* ---------- Overlays ---------- */
+  .overlay{position:absolute;inset:0;z-index:1000;display:none;align-items:center;justify-content:center;
+    padding:18px;background:radial-gradient(120% 120% at 50% 0%,rgba(20,28,40,.78),rgba(8,11,15,.94))}
+  .overlay.show{display:flex}
+  .card{width:100%;max-width:520px;background:var(--panel);border:1px solid var(--line);border-radius:20px;
+    box-shadow:var(--shadow);padding:22px;max-height:92vh;overflow:auto}
+  .card.wide{max-width:880px}
+  .brand{display:flex;align-items:baseline;gap:8px;justify-content:center;margin-bottom:2px}
+  .brand h1{font-size:34px;margin:0;letter-spacing:-.5px}
+  .brand .geo{color:var(--accent)}
+  .tag{text-align:center;color:var(--muted);font-size:13px;margin:0 0 18px}
+  .group{margin:14px 0}
+  .group>label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:7px}
+  .seg{display:flex;flex-wrap:wrap;gap:8px}
+  .seg button{flex:1;min-width:72px;cursor:pointer;border:1px solid var(--line);background:var(--panel2);
+    color:var(--txt);border-radius:11px;padding:10px 8px;font-size:13px;font-weight:600}
+  .seg button.active{border-color:var(--accent);background:rgba(84,192,110,.16);color:#dffbe5}
+  .seg button .sub{display:block;font-size:10px;color:var(--muted);font-weight:500;margin-top:2px}
+  input[type=text]{width:100%;background:#0d1218;border:1px solid var(--line);color:var(--txt);
+    border-radius:11px;padding:11px 12px;font-size:13px;outline:none}
+  input[type=text]:focus{border-color:var(--accent)}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px}
+  .hint a{color:var(--accent)}
+  .bigbtn{width:100%;margin-top:18px;padding:15px;font-size:17px;border-radius:13px}
+  .note{font-size:12px;border-radius:11px;padding:10px 12px;margin-top:12px;line-height:1.45}
+  .note.warn{background:rgba(255,211,78,.10);border:1px solid rgba(255,211,78,.4);color:#ffe9a8}
+  .note.err{background:rgba(255,107,107,.10);border:1px solid rgba(255,107,107,.4);color:#ffc9c9}
+  .hidden{display:none !important}
+
+  /* result */
+  #resultMap{width:100%;height:min(46vh,360px);border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+  .scoreline{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 2px 4px}
+  .scoreline .dist{font-size:14px;color:var(--muted)}
+  .scoreline .pts{font-size:30px;font-weight:800;color:var(--gold)}
+  .bar{height:12px;border-radius:999px;background:#0d1218;border:1px solid var(--line);overflow:hidden;margin-top:10px}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));width:0}
+  .row-actions{display:flex;gap:10px;margin-top:18px}
+  .row-actions .btn{flex:1}
+  .ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--line)}
+
+  /* final */
+  .total{text-align:center;margin:6px 0 4px}
+  .total .big{font-size:46px;font-weight:800;color:var(--gold);line-height:1}
+  .total .of{color:var(--muted);font-size:14px}
+  .breakdown{margin-top:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .breakdown .r{display:flex;justify-content:space-between;padding:9px 12px;font-size:13px;border-top:1px solid var(--line)}
+  .breakdown .r:first-child{border-top:none}
+  .breakdown .r .n{color:var(--muted)}
+  .breakdown .r .d{flex:1;text-align:center;color:var(--muted)}
+  .breakdown .r .p{font-weight:700;color:var(--gold)}
+
+  /* loading */
+  #loading .card{max-width:340px;text-align:center}
+  .spinner{width:46px;height:46px;margin:6px auto 14px;border-radius:50%;
+    border:4px solid var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .leaflet-container{background:#0b0f14}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Street view -->
+  <div id="pano"></div>
+
+  <!-- Click-to-move direction hint (follows the mouse over the panorama) -->
+  <div id="moveCursor" aria-hidden="true">
+    <svg viewBox="0 0 60 60">
+      <circle cx="30" cy="30" r="27" fill="rgba(255,255,255,.10)" stroke="rgba(255,255,255,.55)" stroke-width="2"/>
+      <path d="M19 32 L30 20 L41 32" fill="none" stroke="rgba(255,255,255,.95)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 40 L30 28 L41 40" fill="none" stroke="rgba(255,255,255,.5)"  stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-card">
+      <div class="hud-row">
+        <div class="hud-stat"><span class="k">Round</span><span class="v" id="hudRound">1 / 5</span></div>
+        <div class="hud-stat"><span class="k">Score</span><span class="v" id="hudScore">0</span></div>
+        <div class="hud-stat" id="hudTimerWrap"><span class="k">Time</span><span class="v" id="hudTimer">--</span></div>
+      </div>
+    </div>
+    <span class="pill" id="hudRegion">World</span>
+    <span class="pill" id="hudMode">Move</span>
+    <div class="spacer"></div>
+    <div class="icon-btn" id="btnReturn" title="Return to the starting spot">↩ Return to start</div>
+  </div>
+
+  <!-- Guess panel -->
+  <div id="guessPanel" class="hidden">
+    <div class="panel-bar">
+      <span class="t" id="guessHint">Click the map to drop your pin</span>
+      <span class="x" id="panelToggle" title="Expand / collapse">⤢</span>
+    </div>
+    <div class="map-wrap"><div id="guessMap"></div></div>
+    <button class="btn" id="guessBtn" disabled>Place your pin</button>
+  </div>
+
+  <!-- START -->
+  <div id="start" class="overlay show">
+    <div class="card">
+      <div class="brand"><h1><span class="geo">geo</span>Claudr</h1></div>
+      <p class="tag">Get dropped somewhere on Earth. Look around, then guess where you are.</p>
+
+      <div class="group">
+        <label>Region</label>
+        <div class="seg" id="segRegion">
+          <button data-v="world" class="active">World</button>
+          <button data-v="eu">Europe</button>
+          <button data-v="na">N. America</button>
+          <button data-v="as">Asia</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <label>Rounds</label>
+        <div class="seg" id="segRounds">
+          <button data-v="3">3</button>
+          <button data-v="5" class="active">5</button>
+          <button data-v="10">10</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <label>Movement</label>
+        <div class="seg" id="segMove">
+          <button data-v="move" class="active">Move<span class="sub">explore freely</span></button>
+          <button data-v="nm">No Move<span class="sub">look &amp; zoom only</span></button>
+          <button data-v="nmpz">NMPZ<span class="sub">frozen view</span></button>
+        </div>
+      </div>
+
+      <div class="group">
+        <label>Time limit</label>
+        <div class="seg" id="segTime">
+          <button data-v="0" class="active">None</button>
+          <button data-v="60">1 min</button>
+          <button data-v="120">2 min</button>
+        </div>
+      </div>
+
+      <div class="group" id="tokenGroup">
+        <label>Mapillary access token</label>
+        <input type="text" id="tokenInput" placeholder="MLY|xxxxxxxx|xxxxxxxxxxxxxxxxxxxxxxxxxx" spellcheck="false" autocomplete="off" />
+        <div class="hint">
+          The street imagery is powered by <b>Mapillary</b> (free). Paste your client token above — it's
+          saved on this device. Get one in ~2 min:
+          create an account at <a href="https://www.mapillary.com" target="_blank">mapillary.com</a> →
+          <a href="https://www.mapillary.com/dashboard/developers" target="_blank">Developers dashboard</a> →
+          <i>Register Application</i> → copy the token starting with <b>MLY|</b>.
+        </div>
+      </div>
+
+      <div id="startNote"></div>
+      <button class="btn bigbtn" id="playBtn">▶ Play</button>
+      <div class="hint" id="bestLine" style="text-align:center;margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div id="loading" class="overlay">
+    <div class="card">
+      <div class="spinner"></div>
+      <div id="loadingText" style="font-weight:600">Finding you a place in the world…</div>
+      <div class="hint" id="loadingSub">Searching Mapillary for street imagery</div>
+    </div>
+  </div>
+
+  <!-- RESULT -->
+  <div id="result" class="overlay">
+    <div class="card wide">
+      <div id="resultMap"></div>
+      <div class="scoreline">
+        <div class="dist" id="resDist">—</div>
+        <div class="pts"><span id="resPts">0</span> <span style="font-size:14px;color:var(--muted)">pts</span></div>
+      </div>
+      <div class="bar"><i id="resBar"></i></div>
+      <div class="row-actions">
+        <button class="btn" id="nextBtn">Next round →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FINAL -->
+  <div id="final" class="overlay">
+    <div class="card">
+      <div class="brand"><h1>Game over</h1></div>
+      <div class="total"><div class="big" id="finalScore">0</div><div class="of" id="finalOf">out of 25,000</div></div>
+      <div class="breakdown" id="finalBreakdown"></div>
+      <div id="finalBest" class="hint" style="text-align:center;margin-top:12px"></div>
+      <div class="row-actions">
+        <button class="btn ghost" id="homeBtn">Home</button>
+        <button class="btn" id="againBtn">Play again</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.js"></script>
+<script>
+"use strict";
+
+/* Injected by the MAUI host (MainPage.xaml.cs). Falls back to a saved/typed token. */
+const INJECTED_TOKEN = "__MAPILLARY_TOKEN__";
+
+const $ = (id)=>document.getElementById(id);
+const store = {
+  get(k,d){ try{ const v=localStorage.getItem(k); return v===null?d:v; }catch(e){ return d; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+};
+
+/* ---------------- Curated, well-covered seed locations ----------------
+   We pick a city, jitter it, then ask Mapillary for nearby images, so rounds
+   land on real streets fast instead of in the ocean. region: eu/na/as/sa/af/oc */
+const CITIES = [
+  // Europe
+  {n:"London",lat:51.5074,lon:-0.1278,r:"eu"},{n:"Paris",lat:48.8566,lon:2.3522,r:"eu"},
+  {n:"Berlin",lat:52.52,lon:13.405,r:"eu"},{n:"Madrid",lat:40.4168,lon:-3.7038,r:"eu"},
+  {n:"Barcelona",lat:41.3874,lon:2.1686,r:"eu"},{n:"Rome",lat:41.9028,lon:12.4964,r:"eu"},
+  {n:"Amsterdam",lat:52.3676,lon:4.9041,r:"eu"},{n:"Vienna",lat:48.2082,lon:16.3738,r:"eu"},
+  {n:"Prague",lat:50.0755,lon:14.4378,r:"eu"},{n:"Lisbon",lat:38.7223,lon:-9.1393,r:"eu"},
+  {n:"Stockholm",lat:59.3293,lon:18.0686,r:"eu"},{n:"Copenhagen",lat:55.6761,lon:12.5683,r:"eu"},
+  {n:"Oslo",lat:59.9139,lon:10.7522,r:"eu"},{n:"Helsinki",lat:60.1699,lon:24.9384,r:"eu"},
+  {n:"Warsaw",lat:52.2297,lon:21.0122,r:"eu"},{n:"Budapest",lat:47.4979,lon:19.0402,r:"eu"},
+  {n:"Zurich",lat:47.3769,lon:8.5417,r:"eu"},{n:"Munich",lat:48.1351,lon:11.582,r:"eu"},
+  {n:"Dublin",lat:53.3498,lon:-6.2603,r:"eu"},{n:"Athens",lat:37.9838,lon:23.7275,r:"eu"},
+  {n:"Edinburgh",lat:55.9533,lon:-3.1883,r:"eu"},{n:"Milan",lat:45.4642,lon:9.19,r:"eu"},
+  {n:"Hamburg",lat:53.5511,lon:9.9937,r:"eu"},{n:"Brussels",lat:50.8503,lon:4.3517,r:"eu"},
+  // North America
+  {n:"New York",lat:40.7128,lon:-74.006,r:"na"},{n:"Los Angeles",lat:34.0522,lon:-118.2437,r:"na"},
+  {n:"San Francisco",lat:37.7749,lon:-122.4194,r:"na"},{n:"Chicago",lat:41.8781,lon:-87.6298,r:"na"},
+  {n:"Toronto",lat:43.6532,lon:-79.3832,r:"na"},{n:"Vancouver",lat:49.2827,lon:-123.1207,r:"na"},
+  {n:"Montreal",lat:45.5017,lon:-73.5673,r:"na"},{n:"Seattle",lat:47.6062,lon:-122.3321,r:"na"},
+  {n:"Boston",lat:42.3601,lon:-71.0589,r:"na"},{n:"Austin",lat:30.2672,lon:-97.7431,r:"na"},
+  {n:"Mexico City",lat:19.4326,lon:-99.1332,r:"na"},{n:"Miami",lat:25.7617,lon:-80.1918,r:"na"},
+  {n:"Washington DC",lat:38.9072,lon:-77.0369,r:"na"},{n:"Denver",lat:39.7392,lon:-104.9903,r:"na"},
+  // Asia
+  {n:"Tokyo",lat:35.6762,lon:139.6503,r:"as"},{n:"Osaka",lat:34.6937,lon:135.5023,r:"as"},
+  {n:"Seoul",lat:37.5665,lon:126.978,r:"as"},{n:"Singapore",lat:1.3521,lon:103.8198,r:"as"},
+  {n:"Bangkok",lat:13.7563,lon:100.5018,r:"as"},{n:"Taipei",lat:25.033,lon:121.5654,r:"as"},
+  {n:"Hong Kong",lat:22.3193,lon:114.1694,r:"as"},{n:"Tel Aviv",lat:32.0853,lon:34.7818,r:"as"},
+  {n:"Dubai",lat:25.2048,lon:55.2708,r:"as"},{n:"Kuala Lumpur",lat:3.139,lon:101.6869,r:"as"},
+  {n:"Jakarta",lat:-6.2088,lon:106.8456,r:"as"},{n:"Delhi",lat:28.6139,lon:77.209,r:"as"},
+  // Southern hemisphere / rest (World only)
+  {n:"Sydney",lat:-33.8688,lon:151.2093,r:"oc"},{n:"Melbourne",lat:-37.8136,lon:144.9631,r:"oc"},
+  {n:"Auckland",lat:-36.8485,lon:174.7633,r:"oc"},{n:"São Paulo",lat:-23.5505,lon:-46.6333,r:"sa"},
+  {n:"Rio de Janeiro",lat:-22.9068,lon:-43.1729,r:"sa"},{n:"Buenos Aires",lat:-34.6037,lon:-58.3816,r:"sa"},
+  {n:"Santiago",lat:-33.4489,lon:-70.6693,r:"sa"},{n:"Bogotá",lat:4.711,lon:-74.0721,r:"sa"},
+  {n:"Cape Town",lat:-33.9249,lon:18.4241,r:"af"},{n:"Johannesburg",lat:-26.2041,lon:28.0473,r:"af"},
+  {n:"Nairobi",lat:-1.2921,lon:36.8219,r:"af"}
+];
+
+const state = {
+  token:"", rounds:5, region:"world", move:"move", timeLimit:0,
+  round:0, total:0, history:[],
+  trueLatLng:null, guessLatLng:null,
+  viewer:null, guessMap:null, guessMarker:null, resultMap:null,
+  timer:null, timeLeft:0
+};
+
+/* ---------------- helpers ---------------- */
+function showScreen(idOrNull){
+  ["start","loading","result","final"].forEach(s=>$(s).classList.toggle("show", s===idOrNull));
+}
+function haversineKm(a,b){
+  const R=6371, toR=Math.PI/180;
+  const dLat=(b.lat-a.lat)*toR, dLon=(b.lng-a.lng)*toR;
+  const la1=a.lat*toR, la2=b.lat*toR;
+  const h=Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
+}
+function scoreFor(km){ return Math.round(5000*Math.exp(-km/2000)); }   // GeoGuessr-style decay
+function fmtDist(km){
+  if(km<1) return Math.round(km*1000)+" m";
+  if(km<10) return km.toFixed(2)+" km";
+  if(km<100) return km.toFixed(1)+" km";
+  return Math.round(km).toLocaleString()+" km";
+}
+function tokenLooksValid(t){ return !!t && t.startsWith("MLY|") && !t.includes("YOUR_CLIENT_TOKEN"); }
+function regionLabel(r){ return {world:"World",eu:"Europe",na:"N. America",as:"Asia"}[r]||"World"; }
+function moveLabel(m){ return {move:"Move",nm:"No Move",nmpz:"NMPZ"}[m]||"Move"; }
+
+/* ---------------- segmented controls ---------------- */
+function wireSeg(id, cb){
+  const root=$(id);
+  root.addEventListener("click", e=>{
+    const b=e.target.closest("button"); if(!b) return;
+    [...root.children].forEach(c=>c.classList.toggle("active", c===b));
+    cb(b.dataset.v);
+  });
+}
+wireSeg("segRegion", v=>state.region=v);
+wireSeg("segRounds", v=>state.rounds=parseInt(v,10));
+wireSeg("segMove",   v=>state.move=v);
+wireSeg("segTime",   v=>state.timeLimit=parseInt(v,10));
+
+/* ---------------- start screen ---------------- */
+function initStart(){
+  const saved = store.get("mapillary_token","");
+  const pre = tokenLooksValid(saved) ? saved : (tokenLooksValid(INJECTED_TOKEN)?INJECTED_TOKEN:"");
+  $("tokenInput").value = pre;
+
+  const best = parseInt(store.get("best_score","0"),10);
+  $("bestLine").textContent = best>0 ? ("Best total so far: "+best.toLocaleString()+" pts") : "";
+
+  refreshStartNote();
+  $("tokenInput").addEventListener("input", refreshStartNote);
+}
+function refreshStartNote(){
+  const t=$("tokenInput").value.trim();
+  const note=$("startNote");
+  if(!t){
+    note.innerHTML='<div class="note warn">Paste your free Mapillary token above to start playing.</div>';
+  }else if(!tokenLooksValid(t)){
+    note.innerHTML='<div class="note err">That doesn\'t look like a Mapillary token (it should start with <b>MLY|</b>).</div>';
+  }else{
+    note.innerHTML="";
+  }
+}
+
+/* ---------------- game flow ---------------- */
+async function startGame(){
+  const t=$("tokenInput").value.trim();
+  if(!tokenLooksValid(t)){ refreshStartNote(); return; }
+  state.token=t; store.set("mapillary_token", t);
+
+  state.round=0; state.total=0; state.history=[];
+  $("hudRegion").textContent=regionLabel(state.region);
+  $("hudMode").textContent=moveLabel(state.move);
+  $("hudTimerWrap").style.display = state.timeLimit>0 ? "" : "none";
+  nextRound();
+}
+
+function cityPool(){
+  if(state.region==="world") return CITIES;
+  return CITIES.filter(c=>c.r===state.region);
+}
+
+// One small-box probe near a random covered city. RESOLVES with a location on a
+// hit and REJECTS on miss/error, so Promise.any() below can take the FIRST hit
+// without waiting for slow/empty ones. Mapillary's bbox query is slow and times
+// out on big boxes, so we keep the box tiny and stay near the well-covered core.
+async function probeLocation(signal){
+  const pool=cityPool();
+  const city=pool[Math.floor(Math.random()*pool.length)];
+  const lat=city.lat+(Math.random()-0.5)*0.02;   // small jitter -> high hit-rate near centre
+  const lon=city.lon+(Math.random()-0.5)*0.02;
+  const r=0.005;                                  // ~0.01deg box -> avoids API timeouts
+  const bbox=[lon-r,lat-r,lon+r,lat+r].join(",");
+  const url=`https://graph.mapillary.com/images?access_token=${encodeURIComponent(state.token)}`+
+            `&fields=id,geometry&bbox=${bbox}&limit=10`;
+  const res=await fetch(url,{signal});
+  if(res.status===401||res.status===403){ const e=new Error("auth"); e.auth=true; throw e; }
+  if(!res.ok) throw new Error("http "+res.status);
+  const data=await res.json();
+  if(!data || data.error) throw new Error("api");
+  const feats=data.data||[];
+  if(!feats.length) throw new Error("empty");
+  const pick=feats[Math.floor(Math.random()*feats.length)];
+  const g=pick.geometry&&pick.geometry.coordinates;
+  if(!g) throw new Error("nogeo");
+  return { id:pick.id, lng:g[0], lat:g[1], city:city.n };
+}
+
+async function findRandomLocation(){
+  // Fire a handful of probes at once and take the FIRST that returns imagery
+  // (Promise.any) instead of waiting for the slowest, then abort the rest.
+  for(let batch=0; batch<4; batch++){
+    const ctrl=new AbortController();
+    const killer=setTimeout(()=>ctrl.abort(), 9000);   // a stuck request can't stall the round
+    try{
+      return await Promise.any(Array.from({length:5}, ()=>probeLocation(ctrl.signal)));
+    }catch(aggr){
+      const errs=(aggr && aggr.errors) || [];
+      if(errs.some(e=>e && e.auth)){ const e=new Error("auth"); e.auth=true; throw e; }
+      // whole batch missed/failed -> try another batch
+    }finally{
+      clearTimeout(killer); ctrl.abort();              // cancel any still-pending fetches
+    }
+  }
+  return null;
+}
+
+async function nextRound(){
+  state.round++;
+  state.guessLatLng=null;
+  showScreen("loading");
+  $("hud").classList.add("hidden");
+  $("guessPanel").classList.add("hidden");
+  $("loadingText").textContent="Finding you a place in the world…";
+  $("loadingSub").textContent="Round "+state.round+" of "+state.rounds;
+
+  let loc;
+  try{ loc=await findRandomLocation(); }
+  catch(err){
+    if(err.auth){ backToStartWithError("Your Mapillary token was rejected (401/403). Double-check it and try again."); return; }
+    loc=null;
+  }
+  if(!loc){
+    $("loadingText").textContent="Couldn't find coverage — retrying…";
+    setTimeout(()=>{ state.round--; nextRound(); }, 600);
+    return;
+  }
+
+  state.trueLatLng={lat:loc.lat, lng:loc.lng};
+  await setupViewer(loc.id);
+  setupGuessMap();
+
+  $("hudRound").textContent=state.round+" / "+state.rounds;
+  $("hudScore").textContent=state.total.toLocaleString();
+  $("hud").classList.remove("hidden");
+  $("guessPanel").classList.remove("hidden");
+  setGuessReady(false);
+  showScreen(null);
+  startTimer();
+}
+
+async function setupViewer(imageId){
+  state._startImageId=imageId;
+  const { Viewer } = mapillary;
+
+  // Reuse one viewer for the whole game. Re-creating a Viewer every round leaks
+  // WebGL contexts and eventually shows a black screen, so we just navigate.
+  if(state.viewer){
+    try{ await state.viewer.moveTo(imageId); return; }
+    catch(e){ try{ state.viewer.remove(); }catch(_){} state.viewer=null; $("pano").innerHTML=""; }
+  }
+
+  state.viewer = new Viewer({
+    accessToken: state.token,
+    container: "pano",
+    imageId: imageId,
+    component: { cover:false }
+  });
+
+  // apply movement restrictions (fixed for the whole game)
+  const off=(names)=>names.forEach(n=>{ try{ state.viewer.deactivateComponent(n); }catch(e){} });
+  if(state.move==="nm")   off(["direction","sequence","keyboard","spatial"]);
+  if(state.move==="nmpz") off(["direction","sequence","keyboard","spatial","zoom","pointer"]);
+
+  // Click-to-move (Street-View style): click the image to step forward in the
+  // direction you're currently facing. Only when free movement is allowed.
+  if(state.move==="move"){
+    state.viewer.on("click", ()=>clickMove());
+  }
+}
+
+async function clickMove(){
+  if(state.move!=="move" || !state.viewer) return;
+  const D=mapillary.NavigationDirection; if(!D) return;
+  try{ await state.viewer.moveDir(D.StepForward); return; }catch(e){}
+  try{ await state.viewer.moveDir(D.Next); }catch(e){}        // fallback: next in sequence
+}
+
+/* ---------------- guess map ---------------- */
+function setupGuessMap(){
+  if(state.guessMap){ try{ state.guessMap.remove(); }catch(e){} state.guessMap=null; }
+  state.guessMarker=null;
+  $("guessMap").innerHTML="";
+  const map=L.map("guessMap",{worldCopyJump:true,zoomControl:true,attributionControl:true,
+            minZoom:1, maxZoom:18}).setView([30,0],1);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{
+    maxZoom:19, subdomains:"abcd", keepBuffer:6, updateWhenZooming:false,
+    attribution:'&copy; OpenStreetMap &copy; CARTO'
+  }).addTo(map);
+  map.on("click", e=>{
+    const ll=e.latlng;
+    state.guessLatLng={lat:ll.lat, lng:ll.lng};
+    if(!state.guessMarker){
+      state.guessMarker=L.marker(ll,{draggable:true}).addTo(map);
+      state.guessMarker.on("dragend", ()=>{ const p=state.guessMarker.getLatLng(); state.guessLatLng={lat:p.lat,lng:p.lng}; });
+    }else{ state.guessMarker.setLatLng(ll); }
+    setGuessReady(true);
+  });
+  state.guessMap=map;
+  // The panel/map is created right as the loading overlay hides and can also be
+  // resized by the expand transition, so re-measure a few times to avoid grey tiles.
+  const fix=()=>{ try{ map.invalidateSize(false); }catch(e){} };
+  requestAnimationFrame(fix); setTimeout(fix,150); setTimeout(fix,450);
+}
+function setGuessReady(ready){
+  const b=$("guessBtn");
+  b.disabled=!ready;
+  b.textContent= ready ? "GUESS" : "Place your pin";
+  $("guessHint").textContent= ready ? "Drag the pin to fine-tune, then guess" : "Click the map to drop your pin";
+}
+// Re-measure the guess map after it grows/shrinks. Fired from several triggers
+// (not just transitionend) so it still works when motion/transitions are reduced.
+function scheduleGuessMapInvalidate(){
+  if(!state.guessMap) return;
+  [40,210,380].forEach(ms=>setTimeout(()=>{ try{ state.guessMap.invalidateSize(false); }catch(e){} },ms));
+}
+
+/* ---------------- timer ---------------- */
+function startTimer(){
+  clearInterval(state.timer);
+  if(state.timeLimit<=0){ $("hudTimer").textContent="∞"; return; }
+  state.timeLeft=state.timeLimit;
+  renderTimer();
+  state.timer=setInterval(()=>{
+    state.timeLeft--; renderTimer();
+    if(state.timeLeft<=0){ clearInterval(state.timer); submitGuess(true); }
+  },1000);
+}
+function renderTimer(){
+  const m=Math.floor(state.timeLeft/60), s=state.timeLeft%60;
+  $("hudTimer").textContent = state.timeLimit>0 ? (m+":"+String(s).padStart(2,"0")) : "∞";
+}
+
+/* ---------------- guessing / result ---------------- */
+function submitGuess(auto){
+  if(state.guessLatLng===null && !auto) return;
+  clearInterval(state.timer);
+
+  const guess = state.guessLatLng || {lat:0,lng:0};
+  const km = haversineKm(guess, state.trueLatLng);
+  const pts = state.guessLatLng ? scoreFor(km) : 0;
+  state.total += pts;
+  state.history.push({ round:state.round, km, pts, guessed:!!state.guessLatLng });
+
+  showResult(km, pts, !!state.guessLatLng);
+}
+
+function showResult(km, pts, guessed){
+  showScreen("result");
+  $("resPts").textContent=pts.toLocaleString();
+  $("resDist").textContent = guessed ? ("Your guess was "+fmtDist(km)+" away") : "No guess placed — 0 points";
+  const pct=Math.max(2, Math.round(pts/5000*100));
+  requestAnimationFrame(()=>{ $("resBar").style.width=pct+"%"; });
+  $("nextBtn").textContent = state.round>=state.rounds ? "See final results →" : "Next round →";
+
+  if(state.resultMap){ try{ state.resultMap.remove(); }catch(e){} state.resultMap=null; }
+  $("resultMap").innerHTML="";
+  const map=L.map("resultMap",{worldCopyJump:true,minZoom:1});
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{
+    maxZoom:19, subdomains:"abcd", keepBuffer:6, updateWhenZooming:false,
+    attribution:'&copy; OpenStreetMap &copy; CARTO'
+  }).addTo(map);
+  state.resultMap=map;
+
+  const truth=[state.trueLatLng.lat, state.trueLatLng.lng];
+  const truthIcon=L.divIcon({className:"",html:'<div style="font-size:26px;line-height:1;transform:translate(-12px,-24px)">📍</div>'});
+  L.marker(truth,{icon:truthIcon}).addTo(map).bindPopup("Actual location");
+
+  if(guessed){
+    const g=[state.guessLatLng.lat, state.guessLatLng.lng];
+    const guessIcon=L.divIcon({className:"",html:'<div style="font-size:24px;line-height:1;transform:translate(-11px,-22px)">🔵</div>'});
+    L.marker(g,{icon:guessIcon}).addTo(map).bindPopup("Your guess");
+    L.polyline([g,truth],{color:"#54c06e",weight:3,dashArray:"6 8"}).addTo(map);
+    setTimeout(()=>{ map.invalidateSize(); map.fitBounds(L.latLngBounds([g,truth]).pad(0.35)); },140);
+  }else{
+    setTimeout(()=>{ map.invalidateSize(); map.setView(truth,5); },140);
+  }
+}
+
+function nextOrFinish(){
+  if(state.resultMap){ try{ state.resultMap.remove(); }catch(e){} state.resultMap=null; }
+  if(state.round>=state.rounds) finishGame();
+  else nextRound();
+}
+
+function finishGame(){
+  if(state.viewer){ try{ state.viewer.remove(); }catch(e){} state.viewer=null; }
+  $("hud").classList.add("hidden");
+  $("guessPanel").classList.add("hidden");
+  const max=state.rounds*5000;
+  $("finalScore").textContent=state.total.toLocaleString();
+  $("finalOf").textContent="out of "+max.toLocaleString();
+
+  const bd=$("finalBreakdown"); bd.innerHTML="";
+  state.history.forEach(h=>{
+    const row=document.createElement("div"); row.className="r";
+    row.innerHTML=`<span class="n">Round ${h.round}</span>`+
+                  `<span class="d">${h.guessed?fmtDist(h.km):"no guess"}</span>`+
+                  `<span class="p">${h.pts.toLocaleString()}</span>`;
+    bd.appendChild(row);
+  });
+
+  const best=parseInt(store.get("best_score","0"),10);
+  if(state.total>best){ store.set("best_score", String(state.total));
+    $("finalBest").textContent="🏆 New best score!";
+  }else{
+    $("finalBest").textContent="Best: "+best.toLocaleString()+" pts";
+  }
+  showScreen("final");
+}
+
+function backToStart(){
+  clearInterval(state.timer);
+  if(state.viewer){ try{ state.viewer.remove(); }catch(e){} state.viewer=null; }
+  $("hud").classList.add("hidden");
+  $("guessPanel").classList.add("hidden");
+  initStart();
+  showScreen("start");
+}
+function backToStartWithError(msg){
+  backToStart();
+  $("startNote").innerHTML='<div class="note err">'+msg+'</div>';
+}
+
+/* ---------------- buttons ---------------- */
+$("playBtn").addEventListener("click", startGame);
+$("guessBtn").addEventListener("click", ()=>submitGuess(false));
+$("nextBtn").addEventListener("click", nextOrFinish);
+$("againBtn").addEventListener("click", startGame);
+$("homeBtn").addEventListener("click", backToStart);
+$("btnReturn").addEventListener("click", ()=>{
+  // re-center the street view on the original drop image
+  if(state.viewer && state._startImageId){ try{ state.viewer.moveTo(state._startImageId); }catch(e){} }
+});
+$("panelToggle").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  $("guessPanel").classList.toggle("expanded");
+  scheduleGuessMapInvalidate();
+});
+// Whenever the panel grows/shrinks (button click, hover, or transition end),
+// re-measure the map so Leaflet repositions its tiles instead of leaving black gaps.
+const _gp=$("guessPanel");
+_gp.addEventListener("transitionend", ()=>{ if(state.guessMap){ try{ state.guessMap.invalidateSize(false);}catch(e){} } });
+_gp.addEventListener("pointerenter", scheduleGuessMapInvalidate);
+_gp.addEventListener("pointerleave", scheduleGuessMapInvalidate);
+
+/* ---------------- click-to-move cursor hint ---------------- */
+// A translucent forward arrow follows the mouse over the panorama so you can see
+// where a click will take you. Only while free movement ("Move") is enabled.
+document.addEventListener("mousemove", e=>{
+  const cur=$("moveCursor");
+  const overPano = state.viewer && state.move==="move" &&
+                   $("pano").contains(e.target) && !document.querySelector(".overlay.show");
+  if(!overPano){ cur.classList.remove("show"); return; }
+  const r=$("app").getBoundingClientRect();
+  cur.style.left=(e.clientX-r.left)+"px";
+  cur.style.top =(e.clientY-r.top)+"px";
+  cur.classList.add("show");
+});
+document.addEventListener("mouseleave", ()=>$("moveCursor").classList.remove("show"));
+
+/* ---------------- boot ---------------- */
+window.addEventListener("error", e=>{ /* keep the app alive on transient WebGL hiccups */ });
+initStart();
+</script>
+</body>
+</html>
