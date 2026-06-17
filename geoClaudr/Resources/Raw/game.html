@@ -33,6 +33,8 @@
     padding:10px 12px;pointer-events:none;z-index:500}
   .hud-card{background:rgba(20,25,33,.82);backdrop-filter:blur(8px);border:1px solid var(--line);
     border-radius:12px;padding:8px 12px;box-shadow:var(--shadow);pointer-events:auto}
+  #compass{padding:4px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+  #compass svg{display:block}
   .hud-stat{display:flex;flex-direction:column;line-height:1.05}
   .hud-stat .k{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
   .hud-stat .v{font-size:17px;font-weight:700}
@@ -69,6 +71,19 @@
   .btn:active{transform:translateY(1px)}
   .btn[disabled]{background:#3a444f;color:#8a96a4;cursor:not-allowed;filter:none}
   #guessBtn{margin:8px;border-radius:11px}
+  #guessPanel.collapsed{display:none}
+  #mapFab{position:absolute;right:14px;bottom:14px;z-index:600;display:none;
+    width:58px;height:58px;border-radius:50%;border:1px solid var(--accent2);
+    background:var(--accent);color:#06210e;font-size:26px;line-height:1;
+    box-shadow:var(--shadow);cursor:pointer;align-items:center;justify-content:center}
+  #mapFab.show{display:flex}
+  #mapFab:active{transform:translateY(1px)}
+  /* Mobile: smaller default map + declutter the HUD */
+  @media (max-width:560px){
+    #hudRegion,#hudMode{display:none}
+    #guessPanel{width:210px}
+    #guessPanel .map-wrap{height:150px}
+  }
 
   /* ---------- Overlays ---------- */
   .overlay{position:absolute;inset:0;z-index:1000;display:none;align-items:center;justify-content:center;
@@ -92,6 +107,8 @@
     border-radius:11px;padding:11px 12px;font-size:13px;outline:none}
   input[type=text]:focus{border-color:var(--accent)}
   .hint{font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px}
+  .help-list p{font-size:14px;line-height:1.5;color:var(--txt);margin:10px 2px}
+  .help-list b{color:#dffbe5}
   .hint a{color:var(--accent)}
   .bigbtn{width:100%;margin-top:18px;padding:15px;font-size:17px;border-radius:13px}
   .note{font-size:12px;border-radius:11px;padding:10px 12px;margin-top:12px;line-height:1.45}
@@ -153,9 +170,20 @@
         <div class="hud-stat" id="hudTimerWrap"><span class="k">Time</span><span class="v" id="hudTimer">--</span></div>
       </div>
     </div>
+    <div class="hud-card" id="compass" title="Compass — red points north">
+      <svg viewBox="0 0 40 40" width="40" height="40">
+        <circle cx="20" cy="20" r="18" fill="none" stroke="var(--line)" stroke-width="2"/>
+        <g id="compassDial">
+          <polygon points="20,4 15,20 25,20" fill="#ff6b6b"/>
+          <polygon points="20,36 15,20 25,20" fill="#6b7787"/>
+          <text x="20" y="13" text-anchor="middle" font-size="8" font-weight="700" fill="#fff">N</text>
+        </g>
+      </svg>
+    </div>
     <span class="pill" id="hudRegion">World</span>
     <span class="pill" id="hudMode">Move</span>
     <div class="spacer"></div>
+    <div class="icon-btn" id="btnSkip" title="This spot won't load / too hard — get a new one">🔄 New spot</div>
     <div class="icon-btn" id="btnReturn" title="Return to the starting spot">↩ Return to start</div>
   </div>
 
@@ -164,10 +192,14 @@
     <div class="panel-bar">
       <span class="t" id="guessHint">Click the map to drop your pin</span>
       <span class="x" id="panelToggle" title="Expand / collapse">⤢</span>
+      <span class="x" id="panelMin" title="Minimize map">▾</span>
     </div>
     <div class="map-wrap"><div id="guessMap"></div></div>
     <button class="btn" id="guessBtn" disabled>Place your pin</button>
   </div>
+
+  <!-- Floating button to reopen a minimized guess map -->
+  <button id="mapFab" title="Open the guess map">🗺️</button>
 
   <!-- START -->
   <div id="start" class="overlay show">
@@ -195,6 +227,16 @@
       </div>
 
       <div class="group">
+        <label>Difficulty</label>
+        <div class="seg" id="segDifficulty">
+          <button data-v="easy" class="active">Easy<span class="sub">move, no timer</span></button>
+          <button data-v="normal">Normal<span class="sub">no move</span></button>
+          <button data-v="hard">Hard<span class="sub">NMPZ, 1 min</span></button>
+          <button data-v="custom">Custom<span class="sub">your settings</span></button>
+        </div>
+      </div>
+
+      <div class="group">
         <label>Movement</label>
         <div class="seg" id="segMove">
           <button data-v="move" class="active">Move<span class="sub">explore freely</span></button>
@@ -212,6 +254,25 @@
         </div>
       </div>
 
+      <div class="group">
+        <div style="display:flex;gap:14px">
+          <div style="flex:1">
+            <label>Distance</label>
+            <div class="seg" id="segUnits">
+              <button data-v="km" class="active">km</button>
+              <button data-v="mi">mi</button>
+            </div>
+          </div>
+          <div style="flex:1">
+            <label>Guess map</label>
+            <div class="seg" id="segLabels">
+              <button data-v="on" class="active">Labels</button>
+              <button data-v="off">No labels</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="group" id="tokenGroup">
         <label>Mapillary access token</label>
         <input type="text" id="tokenInput" placeholder="MLY|xxxxxxxx|xxxxxxxxxxxxxxxxxxxxxxxxxx" spellcheck="false" autocomplete="off" />
@@ -226,7 +287,26 @@
 
       <div id="startNote"></div>
       <button class="btn bigbtn" id="playBtn">▶ Play</button>
+      <div class="row-actions">
+        <button class="btn ghost" id="statsBtn">📊 Stats</button>
+        <button class="btn ghost" id="helpBtn">❔ How to play</button>
+      </div>
       <div class="hint" id="bestLine" style="text-align:center;margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- HELP / how to play -->
+  <div id="help" class="overlay">
+    <div class="card">
+      <div class="brand"><h1>How to play</h1></div>
+      <div class="help-list">
+        <p>🌍 You're dropped on a random street somewhere in the world.</p>
+        <p>🖱️ <b>Look around</b> by dragging. <b>Move</b> by clicking the direction you want to go — or use <b>W A S D</b> on a keyboard.</p>
+        <p>🧭 The <b>compass</b> shows where north is. Tap <b>↩ Return</b> to jump back to the drop, or <b>🔄 New spot</b> if a place won't load.</p>
+        <p>🗺️ Open the <b>map</b> (bottom-right), click to drop your pin, fine-tune it, then hit <b>GUESS</b>.</p>
+        <p>🏆 The closer your pin, the more points — up to <b>5000</b> per round.</p>
+      </div>
+      <button class="btn bigbtn" id="helpCloseBtn">Got it</button>
     </div>
   </div>
 
@@ -248,6 +328,7 @@
         <div class="pts"><span id="resPts">0</span> <span style="font-size:14px;color:var(--muted)">pts</span></div>
       </div>
       <div class="bar"><i id="resBar"></i></div>
+      <div class="hint" id="resPlace" style="text-align:center;margin-top:10px;min-height:17px"></div>
       <div class="row-actions">
         <button class="btn" id="nextBtn">Next round →</button>
       </div>
@@ -260,10 +341,25 @@
       <div class="brand"><h1>Game over</h1></div>
       <div class="total"><div class="big" id="finalScore">0</div><div class="of" id="finalOf">out of 25,000</div></div>
       <div class="breakdown" id="finalBreakdown"></div>
+      <div class="hint" style="text-align:center;margin-top:8px">Tap a round to review it</div>
       <div id="finalBest" class="hint" style="text-align:center;margin-top:12px"></div>
+      <button class="btn ghost" id="shareBtn" style="width:100%;margin-top:10px">↗ Share result</button>
       <div class="row-actions">
         <button class="btn ghost" id="homeBtn">Home</button>
         <button class="btn" id="againBtn">Play again</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div id="stats" class="overlay">
+    <div class="card">
+      <div class="brand"><h1>Your stats</h1></div>
+      <p class="tag">Across every game you've played on this device.</p>
+      <div class="breakdown" id="statsBody"></div>
+      <div class="row-actions">
+        <button class="btn ghost" id="statsResetBtn">Reset</button>
+        <button class="btn" id="statsBackBtn">Back</button>
       </div>
     </div>
   </div>
@@ -279,10 +375,46 @@
 const INJECTED_TOKEN = "__MAPILLARY_TOKEN__";
 
 const $ = (id)=>document.getElementById(id);
+
+/* ---------------- native bridge (MAUI host) ----------------
+   The C# host (MainPage.xaml.cs) sets window.__NATIVE=true, fills
+   window.__nativeData with saved values at load, then calls __onNativeReady().
+   Writes/commands go back to C# as a cancelled "geoclaudr://" navigation
+   (queued so a burst doesn't clobber itself). In a plain browser none of this
+   exists, so we transparently fall back to localStorage. */
+// Native flag + saved data are injected by the C# host at load via string
+// replacement (so persistence never depends on a runtime JS call). The defaults
+// below keep a plain browser (the dev preview) working unchanged.
+window.__NATIVE = ('__NATIVE_FLAG__'==='1');
+try{ window.__nativeData = JSON.parse(atob('__NATIVE_DATA_B64__')); }catch(e){ window.__nativeData = {}; }
+const _bridgeQ=[]; let _bridgeBusy=false;
+function nativeCmd(action, params){
+  if(!window.__NATIVE) return;
+  let url="geoclaudr://"+action;
+  const ps=Object.keys(params||{}).map(k=>encodeURIComponent(k)+"="+encodeURIComponent(params[k]));
+  if(ps.length) url+="?"+ps.join("&");
+  _bridgeQ.push(url); flushBridge();
+}
+function flushBridge(){
+  if(_bridgeBusy || !_bridgeQ.length) return;
+  _bridgeBusy=true;
+  const u=_bridgeQ.shift();
+  try{ window.location.href=u; }catch(e){}          // C# cancels this navigation
+  setTimeout(()=>{ _bridgeBusy=false; flushBridge(); }, 30);
+}
 const store = {
-  get(k,d){ try{ const v=localStorage.getItem(k); return v===null?d:v; }catch(e){ return d; } },
-  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  get(k,d){
+    if(Object.prototype.hasOwnProperty.call(window.__nativeData,k)) return window.__nativeData[k];
+    try{ const v=localStorage.getItem(k); return v===null?d:v; }catch(e){ return d; }
+  },
+  set(k,v){
+    v=String(v);
+    window.__nativeData[k]=v;
+    nativeCmd("save",{k:k,v:v});
+    try{ localStorage.setItem(k,v); }catch(e){}
+  }
 };
+function haptic(type){ nativeCmd("haptic",{type:type||"click"}); }
 
 /* ---------------- Curated, well-covered seed locations ----------------
    We pick a city, jitter it, then ask Mapillary for nearby images, so rounds
@@ -335,7 +467,7 @@ const state = {
 
 /* ---------------- helpers ---------------- */
 function showScreen(idOrNull){
-  ["start","loading","result","final"].forEach(s=>$(s).classList.toggle("show", s===idOrNull));
+  ["start","loading","result","final","stats","help"].forEach(s=>$(s).classList.toggle("show", s===idOrNull));
 }
 function haversineKm(a,b){
   const R=6371, toR=Math.PI/180;
@@ -344,8 +476,18 @@ function haversineKm(a,b){
   const h=Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
   return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
 }
-function scoreFor(km){ return Math.round(5000*Math.exp(-km/2000)); }   // GeoGuessr-style decay
+// Smaller scale = stricter. Region games cover less ground, so they score tighter
+// (a 500 km miss should hurt more in "Europe only" than in "World").
+const REGION_SCALE={ world:2000, as:1500, na:1200, eu:600 };
+function scoreFor(km){ return Math.round(5000*Math.exp(-km/(state._scoreScale||2000))); }
 function fmtDist(km){
+  if((state._units||"km")==="mi"){
+    const mi=km*0.621371;
+    if(mi<0.19) return Math.round(mi*5280)+" ft";
+    if(mi<10)  return mi.toFixed(2)+" mi";
+    if(mi<100) return mi.toFixed(1)+" mi";
+    return Math.round(mi).toLocaleString()+" mi";
+  }
   if(km<1) return Math.round(km*1000)+" m";
   if(km<10) return km.toFixed(2)+" km";
   if(km<100) return km.toFixed(1)+" km";
@@ -364,13 +506,47 @@ function wireSeg(id, cb){
     cb(b.dataset.v);
   });
 }
-wireSeg("segRegion", v=>state.region=v);
-wireSeg("segRounds", v=>state.rounds=parseInt(v,10));
-wireSeg("segMove",   v=>state.move=v);
-wireSeg("segTime",   v=>state.timeLimit=parseInt(v,10));
+wireSeg("segRegion", v=>{ state.region=v; store.set("opt_region",v); });
+wireSeg("segRounds", v=>{ state.rounds=parseInt(v,10); store.set("opt_rounds",v); });
+wireSeg("segMove",   v=>{ state.move=v; store.set("opt_move",v); syncDifficulty(); });
+wireSeg("segTime",   v=>{ state.timeLimit=parseInt(v,10); store.set("opt_time",v); syncDifficulty(); });
+wireSeg("segUnits",  v=>{ state._units=v; store.set("opt_units",v); });
+wireSeg("segLabels", v=>{ state._noLabels=(v==="off"); store.set("opt_labels",v); });
+function selectSeg(id, val){
+  const root=$(id); if(!root) return;
+  [...root.children].forEach(b=>b.classList.toggle("active", b.dataset.v===String(val)));
+}
+
+/* ---------------- difficulty presets ---------------- */
+const DIFFICULTY={ easy:{move:"move",time:0}, normal:{move:"nm",time:0}, hard:{move:"nmpz",time:60} };
+function difficultyFromState(){
+  for(const k in DIFFICULTY){ if(DIFFICULTY[k].move===state.move && DIFFICULTY[k].time===state.timeLimit) return k; }
+  return "custom";
+}
+function syncDifficulty(){ selectSeg("segDifficulty", difficultyFromState()); }
+function applyDifficulty(d){
+  const p=DIFFICULTY[d]; if(!p) return;
+  state.move=p.move; store.set("opt_move",p.move); selectSeg("segMove",p.move);
+  state.timeLimit=p.time; store.set("opt_time",String(p.time)); selectSeg("segTime",String(p.time));
+  selectSeg("segDifficulty", d);
+}
+$("segDifficulty").addEventListener("click", e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  if(b.dataset.v!=="custom") applyDifficulty(b.dataset.v);
+});
 
 /* ---------------- start screen ---------------- */
+let _startWired=false;
 function initStart(){
+  // restore saved settings (from native store or localStorage)
+  state.region=store.get("opt_region", state.region);             selectSeg("segRegion", state.region);
+  state.rounds=parseInt(store.get("opt_rounds", state.rounds),10); selectSeg("segRounds", state.rounds);
+  state.move=store.get("opt_move", state.move);                   selectSeg("segMove", state.move);
+  state.timeLimit=parseInt(store.get("opt_time", state.timeLimit),10); selectSeg("segTime", state.timeLimit);
+  syncDifficulty();
+  state._units=store.get("opt_units","km");          selectSeg("segUnits", state._units);
+  const lbl=store.get("opt_labels","on"); state._noLabels=(lbl==="off"); selectSeg("segLabels", lbl);
+
   const saved = store.get("mapillary_token","");
   const pre = tokenLooksValid(saved) ? saved : (tokenLooksValid(INJECTED_TOKEN)?INJECTED_TOKEN:"");
   $("tokenInput").value = pre;
@@ -379,8 +555,10 @@ function initStart(){
   $("bestLine").textContent = best>0 ? ("Best total so far: "+best.toLocaleString()+" pts") : "";
 
   refreshStartNote();
-  $("tokenInput").addEventListener("input", refreshStartNote);
+  if(!_startWired){ _startWired=true; $("tokenInput").addEventListener("input", refreshStartNote); }
 }
+// Re-apply once the native host has pushed saved data (best score, settings, token).
+window.__onNativeReady = function(){ try{ initStart(); }catch(e){} };
 function refreshStartNote(){
   const t=$("tokenInput").value.trim();
   const note=$("startNote");
@@ -398,11 +576,14 @@ async function startGame(){
   const t=$("tokenInput").value.trim();
   if(!tokenLooksValid(t)){ refreshStartNote(); return; }
   state.token=t; store.set("mapillary_token", t);
+  nativeCmd("keepawake",{on:1});          // don't dim/sleep while playing
 
-  state.round=0; state.total=0; state.history=[];
+  state.round=0; state.total=0; state.history=[]; state._prefetch=null;
+  state._scoreScale = REGION_SCALE[state.region] || 2000;
   $("hudRegion").textContent=regionLabel(state.region);
   $("hudMode").textContent=moveLabel(state.move);
   $("hudTimerWrap").style.display = state.timeLimit>0 ? "" : "none";
+  ensureMvt();              // start loading the fast-path tile parser in the background
   nextRound();
 }
 
@@ -411,16 +592,66 @@ function cityPool(){
   return CITIES.filter(c=>c.r===state.region);
 }
 
-// One small-box probe near a random covered city. RESOLVES with a location on a
-// hit and REJECTS on miss/error, so Promise.any() below can take the FIRST hit
-// without waiting for slow/empty ones. Mapillary's bbox query is slow and times
-// out on big boxes, so we keep the box tiny and stay near the well-covered core.
+/* ---------- FAST path: Mapillary coverage vector tiles ----------
+   The /images bbox search hits Mapillary's slow, degraded spatial index. Their
+   coverage VECTOR TILES are CDN-cached, so we grab a z14 tile over a city, read
+   the image points straight out of it and pick one - near-instant, no timeouts.
+   The MVT parser is loaded on demand; if it can't load we fall back to the bbox
+   search automatically, so this can only ever be as good as before, never worse. */
+let _mvtLib;   // {VectorTile, Pbf} once loaded, false if unavailable, undefined if untried
+async function ensureMvt(){
+  if(_mvtLib!==undefined) return _mvtLib;
+  try{
+    const [vt, pbf] = await Promise.all([
+      import("https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@1.3.1/+esm"),
+      import("https://cdn.jsdelivr.net/npm/pbf@3.2.1/+esm")
+    ]);
+    _mvtLib = { VectorTile: vt.VectorTile, Pbf: pbf.default || pbf.Pbf };
+  }catch(e){ _mvtLib = false; }
+  return _mvtLib;
+}
+function lngLatToTileXY(lon, lat, z){
+  const n=Math.pow(2,z);
+  const x=Math.floor((lon+180)/360*n);
+  const la=lat*Math.PI/180;
+  const y=Math.floor((1-Math.log(Math.tan(la)+1/Math.cos(la))/Math.PI)/2*n);
+  const clamp=v=>Math.max(0,Math.min(n-1,v));
+  return { x:clamp(x), y:clamp(y), z };
+}
+// Fetch & parse one coverage tile near a random city; resolve a location or reject.
+async function probeTile(signal){
+  const lib=_mvtLib; if(!lib) throw new Error("nolib");
+  const pool=cityPool();
+  const city=pool[Math.floor(Math.random()*pool.length)];
+  const lat=city.lat+(Math.random()-0.5)*0.06;   // spread across neighbouring tiles
+  const lon=city.lon+(Math.random()-0.5)*0.06;
+  const z=14, t=lngLatToTileXY(lon,lat,z);
+  const url=`https://tiles.mapillary.com/maps/vtp/mly1_public/2/${z}/${t.x}/${t.y}`+
+            `?access_token=${encodeURIComponent(state.token)}`;
+  const res=await fetch(url,{signal});
+  if(res.status===401||res.status===403){ const e=new Error("auth"); e.auth=true; throw e; }
+  if(!res.ok) throw new Error("http "+res.status);
+  const buf=await res.arrayBuffer();
+  const tile=new lib.VectorTile(new lib.Pbf(new Uint8Array(buf)));
+  const layer=tile.layers["image"]||tile.layers["overview"];
+  if(!layer||!layer.length) throw new Error("empty");
+  const f=layer.feature(Math.floor(Math.random()*layer.length));
+  const gj=f.toGeoJSON(t.x,t.y,z);
+  const id=f.properties&&f.properties.id;
+  const c=gj&&gj.geometry&&gj.geometry.coordinates;
+  if(id==null||!c) throw new Error("noid");
+  return { id:String(id), lng:c[0], lat:c[1], city:city.n };
+}
+
+/* ---------- FALLBACK path: bbox /images search ----------
+   Resolves with a location on a hit and REJECTS on miss, so Promise.any can take
+   the FIRST hit without waiting for the slow/empty ones. Tiny box avoids timeouts. */
 async function probeLocation(signal){
   const pool=cityPool();
   const city=pool[Math.floor(Math.random()*pool.length)];
-  const lat=city.lat+(Math.random()-0.5)*0.02;   // small jitter -> high hit-rate near centre
+  const lat=city.lat+(Math.random()-0.5)*0.02;
   const lon=city.lon+(Math.random()-0.5)*0.02;
-  const r=0.005;                                  // ~0.01deg box -> avoids API timeouts
+  const r=0.005;
   const bbox=[lon-r,lat-r,lon+r,lat+r].join(",");
   const url=`https://graph.mapillary.com/images?access_token=${encodeURIComponent(state.token)}`+
             `&fields=id,geometry&bbox=${bbox}&limit=10`;
@@ -437,49 +668,86 @@ async function probeLocation(signal){
   return { id:pick.id, lng:g[0], lat:g[1], city:city.n };
 }
 
-async function findRandomLocation(){
-  // Fire a handful of probes at once and take the FIRST that returns imagery
-  // (Promise.any) instead of waiting for the slowest, then abort the rest.
-  for(let batch=0; batch<4; batch++){
+// Run probes in parallel batches; take the first hit (Promise.any), abort the rest.
+async function runBatches(probe, width, count, timeoutMs){
+  for(let b=0;b<count;b++){
     const ctrl=new AbortController();
-    const killer=setTimeout(()=>ctrl.abort(), 9000);   // a stuck request can't stall the round
+    const killer=setTimeout(()=>ctrl.abort(), timeoutMs);
     try{
-      return await Promise.any(Array.from({length:5}, ()=>probeLocation(ctrl.signal)));
+      return await Promise.any(Array.from({length:width}, ()=>probe(ctrl.signal)));
     }catch(aggr){
       const errs=(aggr && aggr.errors) || [];
       if(errs.some(e=>e && e.auth)){ const e=new Error("auth"); e.auth=true; throw e; }
-      // whole batch missed/failed -> try another batch
     }finally{
-      clearTimeout(killer); ctrl.abort();              // cancel any still-pending fetches
+      clearTimeout(killer); ctrl.abort();
     }
   }
   return null;
 }
 
+async function findRandomLocation(){
+  const lib=await ensureMvt();
+  if(lib){                                   // fast tiles first
+    const hit=await runBatches(probeTile, 4, 4, 6000);
+    if(hit) return hit;
+  }
+  return await runBatches(probeLocation, 5, lib?2:4, 9000);   // bbox fallback / primary
+}
+
 async function nextRound(){
   state.round++;
+  state._rerolls=0;
+  await loadRoundLocation();
+}
+
+// While the player is guessing/seeing results, quietly look up the NEXT round's
+// location so "Next round" loads instantly. No-op on the final round.
+function prefetchNextLocation(){
+  state._prefetch=null;
+  if(state.round>=state.rounds) return;
+  findRandomLocation().then(loc=>{ state._prefetch=loc; }).catch(()=>{ state._prefetch=null; });
+}
+
+// Finds a location and loads its panorama for the current round. Shared by
+// nextRound() and the manual "New spot" skip. Auto-rerolls if the panorama
+// fails to load (dead/black image) up to a few times.
+async function loadRoundLocation(){
+  clearInterval(state.timer);
   state.guessLatLng=null;
   showScreen("loading");
   $("hud").classList.add("hidden");
   $("guessPanel").classList.add("hidden");
-  $("loadingText").textContent="Finding you a place in the world…";
+  $("mapFab").classList.remove("show");
+  $("loadingText").textContent = (state._rerolls>0) ? "Skipping a bad spot…" : "Finding you a place in the world…";
   $("loadingSub").textContent="Round "+state.round+" of "+state.rounds;
 
-  let loc;
-  try{ loc=await findRandomLocation(); }
-  catch(err){
-    if(err.auth){ backToStartWithError("Your Mapillary token was rejected (401/403). Double-check it and try again."); return; }
-    loc=null;
+  let loc=null;
+  if(state._prefetch){ loc=state._prefetch; state._prefetch=null; }   // instant: prepared last round
+  else{
+    try{ loc=await findRandomLocation(); }
+    catch(err){
+      if(err.auth){ backToStartWithError("Your Mapillary token was rejected (401/403). Double-check it and try again."); return; }
+      loc=null;
+    }
   }
   if(!loc){
     $("loadingText").textContent="Couldn't find coverage — retrying…";
-    setTimeout(()=>{ state.round--; nextRound(); }, 600);
+    setTimeout(loadRoundLocation, 600);
     return;
   }
 
   state.trueLatLng={lat:loc.lat, lng:loc.lng};
-  await setupViewer(loc.id);
+  const ok = await setupViewer(loc.id);
+  if(!ok && (state._rerolls||0) < 6){     // panorama never loaded -> try a different spot
+    state._rerolls=(state._rerolls||0)+1;
+    return loadRoundLocation();
+  }
+  state._rerolls=0;
+
   setupGuessMap();
+  state.mapMin=false;
+  $("guessPanel").classList.remove("collapsed");
+  $("mapFab").classList.remove("show");
 
   $("hudRound").textContent=state.round+" / "+state.rounds;
   $("hudScore").textContent=state.total.toLocaleString();
@@ -490,41 +758,75 @@ async function nextRound(){
   startTimer();
 }
 
-async function setupViewer(imageId){
+// Loads imageId into the viewer. Resolves true once an image actually renders,
+// or false if nothing loads within the timeout (treated as a dead/black image).
+function setupViewer(imageId){
   state._startImageId=imageId;
   const { Viewer } = mapillary;
+  return new Promise((resolve)=>{
+    let settled=false, imgHandler=null;
+    const finish=(ok)=>{
+      if(settled) return; settled=true; clearTimeout(wd);
+      if(imgHandler && state.viewer){ try{ state.viewer.off("image", imgHandler); }catch(_){} }
+      resolve(ok);
+    };
+    const wd=setTimeout(()=>finish(false), 9000);          // no image in time -> failed
+    const watchLoad=()=>{ imgHandler=()=>finish(true); try{ state.viewer.on("image", imgHandler); }catch(_){} };
 
-  // Reuse one viewer for the whole game. Re-creating a Viewer every round leaks
-  // WebGL contexts and eventually shows a black screen, so we just navigate.
-  if(state.viewer){
-    try{ await state.viewer.moveTo(imageId); return; }
-    catch(e){ try{ state.viewer.remove(); }catch(_){} state.viewer=null; $("pano").innerHTML=""; }
-  }
+    const createFresh=()=>{
+      try{
+        state.viewer = new Viewer({ accessToken: state.token, container:"pano", imageId, component:{ cover:false } });
+        const off=(names)=>names.forEach(n=>{ try{ state.viewer.deactivateComponent(n); }catch(e){} });
+        if(state.move==="nm")   off(["direction","sequence","keyboard","spatial"]);
+        if(state.move==="nmpz") off(["direction","sequence","keyboard","spatial","zoom","pointer"]);
+        if(state.move==="move") state.viewer.on("click", (e)=>clickMove(e));
+        try{ state.viewer.on("bearing", (e)=>updateCompass(e.bearing)); }catch(_){}
+        watchLoad();
+      }catch(e){ finish(false); }
+    };
 
-  state.viewer = new Viewer({
-    accessToken: state.token,
-    container: "pano",
-    imageId: imageId,
-    component: { cover:false }
+    // Reuse one viewer across rounds (re-creating leaks WebGL contexts).
+    if(state.viewer){
+      watchLoad();
+      Promise.resolve().then(()=>state.viewer.moveTo(imageId)).catch(()=>{
+        if(imgHandler && state.viewer){ try{ state.viewer.off("image", imgHandler); }catch(_){} imgHandler=null; }
+        try{ state.viewer.remove(); }catch(_){}
+        state.viewer=null; $("pano").innerHTML="";
+        createFresh();
+      });
+    } else {
+      createFresh();
+    }
   });
-
-  // apply movement restrictions (fixed for the whole game)
-  const off=(names)=>names.forEach(n=>{ try{ state.viewer.deactivateComponent(n); }catch(e){} });
-  if(state.move==="nm")   off(["direction","sequence","keyboard","spatial"]);
-  if(state.move==="nmpz") off(["direction","sequence","keyboard","spatial","zoom","pointer"]);
-
-  // Click-to-move (Street-View style): click the image to step forward in the
-  // direction you're currently facing. Only when free movement is allowed.
-  if(state.move==="move"){
-    state.viewer.on("click", ()=>clickMove());
-  }
 }
 
-async function clickMove(){
+// Map an offset from the viewport centre to a step direction + arrow rotation.
+// Dominant axis wins: above centre = forward, below = back, sides = left/right.
+function dirFromOffset(dx, dy){
+  if(Math.abs(dx) >= Math.abs(dy))
+    return dx>=0 ? {nav:"StepRight", deg:90} : {nav:"StepLeft", deg:-90};
+  return dy<0 ? {nav:"StepForward", deg:0} : {nav:"StepBackward", deg:180};
+}
+async function moveInDir(nav){
   if(state.move!=="move" || !state.viewer) return;
   const D=mapillary.NavigationDirection; if(!D) return;
-  try{ await state.viewer.moveDir(D.StepForward); return; }catch(e){}
-  try{ await state.viewer.moveDir(D.Next); }catch(e){}        // fallback: next in sequence
+  // try the chosen direction, then sensible fallbacks if no image lies that way
+  for(const n of [nav,"StepForward","Next"]){
+    try{ await state.viewer.moveDir(D[n]); return; }catch(_){}
+  }
+}
+async function clickMove(e){
+  let nav = state._moveDir || "StepForward";
+  if(e && e.pixelPoint){                      // use where the click landed
+    const el=$("pano"), w=el.clientWidth||1, h=el.clientHeight||1;
+    nav = dirFromOffset(e.pixelPoint[0]-w/2, e.pixelPoint[1]-h/2).nav;
+  }
+  moveInDir(nav);
+}
+// Rotate the compass dial so the red pointer shows where north is in the current view.
+function updateCompass(bearing){
+  const d=$("compassDial");
+  if(d) d.setAttribute("transform","rotate("+(-(bearing||0))+" 20 20)");
 }
 
 /* ---------------- guess map ---------------- */
@@ -534,7 +836,8 @@ function setupGuessMap(){
   $("guessMap").innerHTML="";
   const map=L.map("guessMap",{worldCopyJump:true,zoomControl:true,attributionControl:true,
             minZoom:1, maxZoom:18}).setView([30,0],1);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{
+  const style = state._noLabels ? "rastertiles/voyager_nolabels" : "rastertiles/voyager";
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/"+style+"/{z}/{x}/{y}{r}.png",{
     maxZoom:19, subdomains:"abcd", keepBuffer:6, updateWhenZooming:false,
     attribution:'&copy; OpenStreetMap &copy; CARTO'
   }).addTo(map);
@@ -582,6 +885,11 @@ function renderTimer(){
   $("hudTimer").textContent = state.timeLimit>0 ? (m+":"+String(s).padStart(2,"0")) : "∞";
 }
 
+/* ---------------- lifetime stats (persisted) ---------------- */
+function statBump(key, delta){ store.set(key, String((parseFloat(store.get(key,"0"))||0)+delta)); }
+function statMax(key, val){ if(val>(parseFloat(store.get(key,"0"))||0)) store.set(key, String(val)); }
+function statMin(key, val){ const c=store.get(key,""); if(c===""||val<parseFloat(c)) store.set(key, String(val)); }
+
 /* ---------------- guessing / result ---------------- */
 function submitGuess(auto){
   if(state.guessLatLng===null && !auto) return;
@@ -591,19 +899,40 @@ function submitGuess(auto){
   const km = haversineKm(guess, state.trueLatLng);
   const pts = state.guessLatLng ? scoreFor(km) : 0;
   state.total += pts;
-  state.history.push({ round:state.round, km, pts, guessed:!!state.guessLatLng });
+  state.history.push({ round:state.round, km, pts, guessed:!!state.guessLatLng,
+    trueLatLng:{lat:state.trueLatLng.lat, lng:state.trueLatLng.lng},
+    guessLatLng: state.guessLatLng ? {lat:state.guessLatLng.lat, lng:state.guessLatLng.lng} : null });
 
+  // lifetime stats
+  statBump("st_rounds",1);
+  statBump("st_points",pts);
+  statMax("st_bestround",pts);
+  if(state.guessLatLng) statMin("st_closest",km);
+
+  haptic(pts>=4000 ? "success" : "click");      // buzz on guess (stronger for a great one)
   showResult(km, pts, !!state.guessLatLng);
+  prefetchNextLocation();        // get the next spot ready while the result is up
 }
 
-function showResult(km, pts, guessed){
-  showScreen("result");
-  $("resPts").textContent=pts.toLocaleString();
-  $("resDist").textContent = guessed ? ("Your guess was "+fmtDist(km)+" away") : "No guess placed — 0 points";
-  const pct=Math.max(2, Math.round(pts/5000*100));
-  requestAnimationFrame(()=>{ $("resBar").style.width=pct+"%"; });
-  $("nextBtn").textContent = state.round>=state.rounds ? "See final results →" : "Next round →";
+// Country-code -> flag emoji (shows as letters on Windows, which lacks flag glyphs).
+function flagEmoji(cc){ try{ return cc.toUpperCase().replace(/[A-Z]/g,c=>String.fromCodePoint(127397+c.charCodeAt(0))); }catch(e){ return ""; } }
+// Reverse-geocode the true location for the result screen (free, keyless, CORS-ok).
+async function showAnswerPlace(lat,lng){
+  const el=$("resPlace"); el.textContent="Looking up the location…";
+  try{
+    const r=await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`);
+    if(!r.ok){ el.textContent=""; return; }
+    const d=await r.json();
+    const country=(d.countryName||"").replace(/\s*\(the\)$/i,"");   // "United States ... (the)" -> clean
+    const parts=[d.city||d.locality, d.principalSubdivision, country].filter(Boolean);
+    if(!parts.length){ el.textContent=""; return; }
+    const flag=d.countryCode?flagEmoji(d.countryCode):"";
+    el.textContent="📍 Actual location: "+parts.join(", ")+(flag?(" "+flag):"");
+  }catch(e){ el.textContent=""; }
+}
 
+// Draw the result map (truth pin, guess pin, connecting line) for given coords.
+function buildResultMap(trueLL, guessLL, guessed){
   if(state.resultMap){ try{ state.resultMap.remove(); }catch(e){} state.resultMap=null; }
   $("resultMap").innerHTML="";
   const map=L.map("resultMap",{worldCopyJump:true,minZoom:1});
@@ -613,12 +942,12 @@ function showResult(km, pts, guessed){
   }).addTo(map);
   state.resultMap=map;
 
-  const truth=[state.trueLatLng.lat, state.trueLatLng.lng];
+  const truth=[trueLL.lat, trueLL.lng];
   const truthIcon=L.divIcon({className:"",html:'<div style="font-size:26px;line-height:1;transform:translate(-12px,-24px)">📍</div>'});
   L.marker(truth,{icon:truthIcon}).addTo(map).bindPopup("Actual location");
 
-  if(guessed){
-    const g=[state.guessLatLng.lat, state.guessLatLng.lng];
+  if(guessed && guessLL){
+    const g=[guessLL.lat, guessLL.lng];
     const guessIcon=L.divIcon({className:"",html:'<div style="font-size:24px;line-height:1;transform:translate(-11px,-22px)">🔵</div>'});
     L.marker(g,{icon:guessIcon}).addTo(map).bindPopup("Your guess");
     L.polyline([g,truth],{color:"#54c06e",weight:3,dashArray:"6 8"}).addTo(map);
@@ -628,43 +957,88 @@ function showResult(km, pts, guessed){
   }
 }
 
+function fillResultUI(km, pts, guessed, trueLL){
+  $("resPts").textContent=pts.toLocaleString();
+  $("resDist").textContent = guessed ? ("Your guess was "+fmtDist(km)+" away") : "No guess placed — 0 points";
+  showAnswerPlace(trueLL.lat, trueLL.lng);
+  const pct=Math.max(2, Math.round(pts/5000*100));
+  $("resBar").style.width="0";
+  requestAnimationFrame(()=>{ $("resBar").style.width=pct+"%"; });
+}
+
+function showResult(km, pts, guessed){
+  state._reviewing=false;
+  showScreen("result");
+  fillResultUI(km, pts, guessed, state.trueLatLng);
+  $("nextBtn").textContent = state.round>=state.rounds ? "See final results →" : "Next round →";
+  buildResultMap(state.trueLatLng, state.guessLatLng, guessed);
+}
+
+// Replay a finished round's result from the end-game scoreboard.
+function reviewRound(i){
+  const h=state.history[i]; if(!h || !h.trueLatLng) return;
+  state._reviewing=true;
+  showScreen("result");
+  fillResultUI(h.km, h.pts, h.guessed, h.trueLatLng);
+  $("nextBtn").textContent="← Back to results";
+  buildResultMap(h.trueLatLng, h.guessLatLng, h.guessed);
+}
+
 function nextOrFinish(){
   if(state.resultMap){ try{ state.resultMap.remove(); }catch(e){} state.resultMap=null; }
+  if(state._reviewing){ state._reviewing=false; showScreen("final"); return; }
   if(state.round>=state.rounds) finishGame();
   else nextRound();
 }
 
 function finishGame(){
   if(state.viewer){ try{ state.viewer.remove(); }catch(e){} state.viewer=null; }
+  nativeCmd("keepawake",{on:0});
+  statBump("st_games",1);
   $("hud").classList.add("hidden");
   $("guessPanel").classList.add("hidden");
+  $("mapFab").classList.remove("show");
   const max=state.rounds*5000;
   $("finalScore").textContent=state.total.toLocaleString();
   $("finalOf").textContent="out of "+max.toLocaleString();
 
   const bd=$("finalBreakdown"); bd.innerHTML="";
-  state.history.forEach(h=>{
-    const row=document.createElement("div"); row.className="r";
+  state.history.forEach((h,idx)=>{
+    const row=document.createElement("div"); row.className="r"; row.dataset.i=idx; row.style.cursor="pointer";
     row.innerHTML=`<span class="n">Round ${h.round}</span>`+
                   `<span class="d">${h.guessed?fmtDist(h.km):"no guess"}</span>`+
-                  `<span class="p">${h.pts.toLocaleString()}</span>`;
+                  `<span class="p">${h.pts.toLocaleString()} ›</span>`;
     bd.appendChild(row);
   });
 
   const best=parseInt(store.get("best_score","0"),10);
   if(state.total>best){ store.set("best_score", String(state.total));
-    $("finalBest").textContent="🏆 New best score!";
+    $("finalBest").textContent="🏆 New best score!"; haptic("success");
   }else{
     $("finalBest").textContent="Best: "+best.toLocaleString()+" pts";
   }
   showScreen("final");
 }
 
+function shareResults(){
+  const max=state.rounds*5000;
+  const text=`I scored ${state.total.toLocaleString()} / ${max.toLocaleString()} in geoClaudr! 🌍 `+
+             `(${state.rounds} rounds · ${regionLabel(state.region)})`;
+  if(window.__NATIVE){ nativeCmd("share",{text:text}); return; }       // native share sheet
+  if(navigator.share){ navigator.share({title:"geoClaudr", text:text}).catch(()=>{}); return; }
+  try{ navigator.clipboard.writeText(text);
+    const b=$("shareBtn"), o=b.textContent; b.textContent="Copied to clipboard!";
+    setTimeout(()=>{ b.textContent=o; },1600);
+  }catch(e){}
+}
+
 function backToStart(){
   clearInterval(state.timer);
+  nativeCmd("keepawake",{on:0});
   if(state.viewer){ try{ state.viewer.remove(); }catch(e){} state.viewer=null; }
   $("hud").classList.add("hidden");
   $("guessPanel").classList.add("hidden");
+  $("mapFab").classList.remove("show");
   initStart();
   showScreen("start");
 }
@@ -673,21 +1047,77 @@ function backToStartWithError(msg){
   $("startNote").innerHTML='<div class="note err">'+msg+'</div>';
 }
 
+/* ---------------- stats screen ---------------- */
+function statRow(label, value){ return `<div class="r"><span class="n">${label}</span><span class="p">${value}</span></div>`; }
+function renderStats(){
+  const games=parseInt(store.get("st_games","0"),10)||0;
+  const rounds=parseInt(store.get("st_rounds","0"),10)||0;
+  const points=parseInt(store.get("st_points","0"),10)||0;
+  const bestGame=parseInt(store.get("best_score","0"),10)||0;
+  const bestRound=parseInt(store.get("st_bestround","0"),10)||0;
+  const closestRaw=store.get("st_closest","");
+  const avg = rounds ? Math.round(points/rounds) : 0;
+  $("statsBody").innerHTML =
+    statRow("Games played", games.toLocaleString())+
+    statRow("Rounds played", rounds.toLocaleString())+
+    statRow("Avg score / round", rounds ? avg.toLocaleString() : "—")+
+    statRow("Best game", bestGame ? bestGame.toLocaleString() : "—")+
+    statRow("Best round", bestRound ? bestRound.toLocaleString()+" / 5000" : "—")+
+    statRow("Closest guess ever", closestRaw!=="" ? fmtDist(parseFloat(closestRaw)) : "—");
+}
+function openStats(){ renderStats(); showScreen("stats"); }
+let _resetArmed=false;
+function resetStats(){
+  ["st_games","st_rounds","st_points","st_bestround","best_score"].forEach(k=>store.set(k,"0"));
+  store.set("st_closest","");
+  renderStats();
+  initStart();   // refresh the "best so far" line too
+}
+
 /* ---------------- buttons ---------------- */
 $("playBtn").addEventListener("click", startGame);
 $("guessBtn").addEventListener("click", ()=>submitGuess(false));
 $("nextBtn").addEventListener("click", nextOrFinish);
 $("againBtn").addEventListener("click", startGame);
 $("homeBtn").addEventListener("click", backToStart);
+$("shareBtn").addEventListener("click", shareResults);
+$("statsBtn").addEventListener("click", openStats);
+$("statsBackBtn").addEventListener("click", ()=>showScreen("start"));
+$("helpBtn").addEventListener("click", ()=>showScreen("help"));
+$("helpCloseBtn").addEventListener("click", ()=>{ store.set("seen_help","1"); showScreen("start"); });
+$("finalBreakdown").addEventListener("click", e=>{
+  const r=e.target.closest(".r"); if(r && r.dataset.i!=null) reviewRound(parseInt(r.dataset.i,10));
+});
+$("statsResetBtn").addEventListener("click", ()=>{
+  const b=$("statsResetBtn");
+  if(!_resetArmed){ _resetArmed=true; b.textContent="Tap again to confirm"; setTimeout(()=>{ _resetArmed=false; b.textContent="Reset"; },2500); return; }
+  _resetArmed=false; b.textContent="Reset"; resetStats();
+});
 $("btnReturn").addEventListener("click", ()=>{
   // re-center the street view on the original drop image
   if(state.viewer && state._startImageId){ try{ state.viewer.moveTo(state._startImageId); }catch(e){} }
 });
+$("btnSkip").addEventListener("click", ()=>{ state._rerolls=0; loadRoundLocation(); });
 $("panelToggle").addEventListener("click", (e)=>{
   e.stopPropagation();
   $("guessPanel").classList.toggle("expanded");
   scheduleGuessMapInvalidate();
 });
+// Minimize the guess map to a floating button, and reopen it.
+function minimizeMap(){
+  state.mapMin=true;
+  $("guessPanel").classList.remove("expanded");
+  $("guessPanel").classList.add("collapsed");
+  $("mapFab").classList.add("show");
+}
+function openMap(){
+  state.mapMin=false;
+  $("guessPanel").classList.remove("collapsed");
+  $("mapFab").classList.remove("show");
+  scheduleGuessMapInvalidate();
+}
+$("panelMin").addEventListener("click", (e)=>{ e.stopPropagation(); minimizeMap(); });
+$("mapFab").addEventListener("click", openMap);
 // Whenever the panel grows/shrinks (button click, hover, or transition end),
 // re-measure the map so Leaflet repositions its tiles instead of leaving black gaps.
 const _gp=$("guessPanel");
@@ -696,23 +1126,38 @@ _gp.addEventListener("pointerenter", scheduleGuessMapInvalidate);
 _gp.addEventListener("pointerleave", scheduleGuessMapInvalidate);
 
 /* ---------------- click-to-move cursor hint ---------------- */
-// A translucent forward arrow follows the mouse over the panorama so you can see
-// where a click will take you. Only while free movement ("Move") is enabled.
+// A translucent arrow follows the mouse over the panorama and points in the
+// direction a click will move you. Only while free movement ("Move") is enabled.
 document.addEventListener("mousemove", e=>{
   const cur=$("moveCursor");
   const overPano = state.viewer && state.move==="move" &&
                    $("pano").contains(e.target) && !document.querySelector(".overlay.show");
   if(!overPano){ cur.classList.remove("show"); return; }
-  const r=$("app").getBoundingClientRect();
-  cur.style.left=(e.clientX-r.left)+"px";
-  cur.style.top =(e.clientY-r.top)+"px";
+  const pr=$("pano").getBoundingClientRect();
+  const d=dirFromOffset(e.clientX-(pr.left+pr.width/2), e.clientY-(pr.top+pr.height/2));
+  state._moveDir=d.nav;
+  const ar=$("app").getBoundingClientRect();
+  cur.style.left=(e.clientX-ar.left)+"px";
+  cur.style.top =(e.clientY-ar.top)+"px";
+  cur.style.transform="translate(-50%,-50%) rotate("+d.deg+"deg)";
   cur.classList.add("show");
 });
 document.addEventListener("mouseleave", ()=>$("moveCursor").classList.remove("show"));
 
+// Keyboard movement (desktop): W/A/S/D move forward/left/back/right.
+document.addEventListener("keydown", e=>{
+  if(state.move!=="move" || !state.viewer) return;
+  if(document.querySelector(".overlay.show")) return;          // not during menus/results
+  const tag=(e.target&&e.target.tagName)||""; if(tag==="INPUT"||tag==="TEXTAREA") return;
+  const map={KeyW:"StepForward",KeyS:"StepBackward",KeyA:"StepLeft",KeyD:"StepRight"};
+  const nav=map[e.code]; if(!nav) return;
+  e.preventDefault(); moveInDir(nav);
+});
+
 /* ---------------- boot ---------------- */
 window.addEventListener("error", e=>{ /* keep the app alive on transient WebGL hiccups */ });
 initStart();
+if(store.get("seen_help","")!=="1") showScreen("help");   // first-launch onboarding
 </script>
 </body>
 </html>
