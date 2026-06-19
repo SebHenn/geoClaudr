@@ -13,7 +13,7 @@ public partial class MainPage : ContentPage
     {
         "mapillary_token", "best_score",
         "opt_region", "opt_rounds", "opt_move", "opt_time",
-        "st_games", "st_rounds", "st_points", "st_bestround", "st_closest"
+        "st_games", "st_rounds", "st_points", "st_bestround", "st_closest", "st_regions"
     };
 
     public MainPage()
@@ -50,6 +50,24 @@ public partial class MainPage : ContentPage
                 .Replace("__NATIVE_FLAG__", "1")
                 .Replace("__NATIVE_DATA_B64__", b64);
 
+            // Self-host the small JS libraries: swap their CDN tags for inline copies
+            // packaged under Resources/Raw/lib. Each replacement is best-effort — if an
+            // asset is missing the original CDN tag survives, so it's never worse than before.
+            // (mapillary-js itself stays on the CDN: it's too large for the WebView2
+            // NavigateToString ~2 MB cap on string-loaded HTML.)
+            html = await InlineLibraryAsync(html,
+                "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\" />",
+                "lib/leaflet.css", css => $"<style>{css}</style>");
+            html = await InlineLibraryAsync(html,
+                "<link rel=\"stylesheet\" href=\"https://unpkg.com/mapillary-js@4.1.2/dist/mapillary.css\" />",
+                "lib/mapillary.css", css => $"<style>{css}</style>");
+            html = await InlineLibraryAsync(html,
+                "<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>",
+                "lib/leaflet.js", js => $"<script>{js}</script>");
+            html = await InlineLibraryAsync(html,
+                "__MVT_SRC_B64__", "lib/mvt.esm.js",
+                js => Convert.ToBase64String(Encoding.UTF8.GetBytes(js)));
+
             GameView.Source = new HtmlWebViewSource
             {
                 Html = html,
@@ -63,6 +81,29 @@ public partial class MainPage : ContentPage
                 Html = $"<html><body style='font-family:sans-serif;padding:24px;background:#0e1116;color:#fff'>" +
                        $"<h2>Failed to load game</h2><pre>{System.Net.WebUtility.HtmlEncode(ex.ToString())}</pre></body></html>"
             };
+        }
+    }
+
+    /// <summary>
+    /// Replaces <paramref name="marker"/> in the HTML with an inline copy of a packaged
+    /// asset (transformed by <paramref name="wrap"/>). If the marker is absent or the
+    /// asset can't be read, the HTML is returned unchanged so the original CDN reference
+    /// remains in place.
+    /// </summary>
+    private static async Task<string> InlineLibraryAsync(
+        string html, string marker, string assetPath, Func<string, string> wrap)
+    {
+        if (!html.Contains(marker)) return html;
+        try
+        {
+            using var stream = await FileSystem.OpenAppPackageFileAsync(assetPath);
+            using var reader = new StreamReader(stream);
+            var contents = await reader.ReadToEndAsync();
+            return html.Replace(marker, wrap(contents));
+        }
+        catch
+        {
+            return html;   // asset missing -> leave the CDN tag/placeholder untouched
         }
     }
 

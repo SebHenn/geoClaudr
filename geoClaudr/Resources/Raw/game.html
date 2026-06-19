@@ -109,6 +109,20 @@
   .hint{font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px}
   .help-list p{font-size:14px;line-height:1.5;color:var(--txt);margin:10px 2px}
   .help-list b{color:#dffbe5}
+  .stats-h{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 2px 8px}
+  .ach-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .ach{border:1px solid var(--line);border-radius:11px;padding:10px 6px;text-align:center;background:var(--panel2);opacity:.4}
+  .ach.on{opacity:1;border-color:var(--accent);background:rgba(84,192,110,.14)}
+  .ach .e{font-size:22px;line-height:1}
+  .ach .t{font-size:11px;font-weight:700;margin-top:4px}
+  .ach .d{font-size:9px;color:var(--muted);margin-top:2px;line-height:1.2}
+  #toast{position:absolute;left:50%;bottom:84px;transform:translateX(-50%) translateY(20px);z-index:1200;
+    background:rgba(20,25,33,.95);border:1px solid var(--accent);color:var(--txt);font-size:13px;font-weight:600;
+    padding:10px 16px;border-radius:12px;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .confetti{position:absolute;top:-12px;width:9px;height:14px;z-index:1100;pointer-events:none;border-radius:1px;
+    animation:confettiFall linear forwards}
+  @keyframes confettiFall{to{transform:translateY(105vh) rotate(720deg);opacity:.9}}
   .hint a{color:var(--accent)}
   .bigbtn{width:100%;margin-top:18px;padding:15px;font-size:17px;border-radius:13px}
   .note{font-size:12px;border-radius:11px;padding:10px 12px;margin-top:12px;line-height:1.45}
@@ -167,6 +181,7 @@
       <div class="hud-row">
         <div class="hud-stat"><span class="k">Round</span><span class="v" id="hudRound">1 / 5</span></div>
         <div class="hud-stat"><span class="k">Score</span><span class="v" id="hudScore">0</span></div>
+        <div class="hud-stat" id="hudAvgWrap" style="display:none"><span class="k">Avg</span><span class="v" id="hudAvg">0</span></div>
         <div class="hud-stat" id="hudTimerWrap"><span class="k">Time</span><span class="v" id="hudTimer">--</span></div>
       </div>
     </div>
@@ -185,6 +200,7 @@
     <div class="spacer"></div>
     <div class="icon-btn" id="btnSkip" title="This spot won't load / too hard — get a new one">🔄 New spot</div>
     <div class="icon-btn" id="btnReturn" title="Return to the starting spot">↩ Return to start</div>
+    <div class="icon-btn" id="btnEnd" title="End this endless session" style="display:none">⏹ End</div>
   </div>
 
   <!-- Guess panel -->
@@ -223,6 +239,7 @@
           <button data-v="3">3</button>
           <button data-v="5" class="active">5</button>
           <button data-v="10">10</button>
+          <button data-v="endless">∞<span class="sub">endless</span></button>
         </div>
       </div>
 
@@ -264,12 +281,21 @@
             </div>
           </div>
           <div style="flex:1">
-            <label>Guess map</label>
-            <div class="seg" id="segLabels">
-              <button data-v="on" class="active">Labels</button>
-              <button data-v="off">No labels</button>
+            <label>Sound</label>
+            <div class="seg" id="segSound">
+              <button data-v="off" class="active">Off</button>
+              <button data-v="on">On</button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="group">
+        <label>Guess map</label>
+        <div class="seg" id="segBasemap">
+          <button data-v="map" class="active">Map</button>
+          <button data-v="plain">No labels</button>
+          <button data-v="sat">Satellite</button>
         </div>
       </div>
 
@@ -292,6 +318,17 @@
         <button class="btn ghost" id="helpBtn">❔ How to play</button>
       </div>
       <div class="hint" id="bestLine" style="text-align:center;margin-top:12px"></div>
+
+      <div class="group" style="border-top:1px solid var(--line);margin-top:18px;padding-top:16px">
+        <label>Challenge a friend</label>
+        <button class="btn ghost" id="dailyBtn" style="width:100%">🗓️ Daily Challenge</button>
+        <div class="hint" id="dailyStreak" style="text-align:center;margin-top:6px"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input type="text" id="seedInput" placeholder="enter a seed code" spellcheck="false" autocomplete="off" />
+          <button class="btn ghost" id="seedBtn" style="white-space:nowrap;padding:11px 16px">Play seed</button>
+        </div>
+        <div class="hint">Everyone who plays the same daily or seed gets the <b>same 5 locations</b> (fixed at World · 5 rounds · Move) — compare scores!</div>
+      </div>
     </div>
   </div>
 
@@ -316,6 +353,7 @@
       <div class="spinner"></div>
       <div id="loadingText" style="font-weight:600">Finding you a place in the world…</div>
       <div class="hint" id="loadingSub">Searching Mapillary for street imagery</div>
+      <div class="note" id="loadingTip" style="margin-top:16px;border:1px solid var(--line);background:var(--panel2);color:var(--muted)"></div>
     </div>
   </div>
 
@@ -343,6 +381,7 @@
       <div class="breakdown" id="finalBreakdown"></div>
       <div class="hint" style="text-align:center;margin-top:8px">Tap a round to review it</div>
       <div id="finalBest" class="hint" style="text-align:center;margin-top:12px"></div>
+      <div id="finalSeed" class="hint" style="text-align:center;margin-top:6px;display:none"></div>
       <button class="btn ghost" id="shareBtn" style="width:100%;margin-top:10px">↗ Share result</button>
       <div class="row-actions">
         <button class="btn ghost" id="homeBtn">Home</button>
@@ -357,12 +396,21 @@
       <div class="brand"><h1>Your stats</h1></div>
       <p class="tag">Across every game you've played on this device.</p>
       <div class="breakdown" id="statsBody"></div>
+      <label class="stats-h">By region</label>
+      <div class="breakdown" id="statsRegions"></div>
+      <label class="stats-h">Achievements</label>
+      <div id="statsAchievements" class="ach-grid"></div>
+      <label class="stats-h">Recent games</label>
+      <div class="breakdown" id="statsRecent"></div>
       <div class="row-actions">
         <button class="btn ghost" id="statsResetBtn">Reset</button>
         <button class="btn" id="statsBackBtn">Back</button>
       </div>
     </div>
   </div>
+
+  <!-- Transient toast (achievement unlocks etc.) -->
+  <div id="toast"></div>
 
 </div>
 
@@ -373,6 +421,10 @@
 
 /* Injected by the MAUI host (MainPage.xaml.cs). Falls back to a saved/typed token. */
 const INJECTED_TOKEN = "__MAPILLARY_TOKEN__";
+
+/* Self-hosted MVT parser (vector-tile + pbf) bundle, base64-injected by the C#
+   host. Left as the placeholder in a plain browser, where we fall back to the CDN. */
+const MVT_SRC_B64 = "__MVT_SRC_B64__";
 
 const $ = (id)=>document.getElementById(id);
 
@@ -415,6 +467,72 @@ const store = {
   }
 };
 function haptic(type){ nativeCmd("haptic",{type:type||"click"}); }
+function showToast(msg){
+  const t=$("toast"); if(!t) return;
+  t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"), 2600);
+}
+function confettiBurst(){
+  const colors=["#54c06e","#ffd34e","#3fa85c","#7fd0ff","#ff6b6b"];
+  const app=$("app");
+  for(let i=0;i<36;i++){
+    const c=document.createElement("div"); c.className="confetti";
+    c.style.left=(Math.random()*100)+"%";
+    c.style.background=colors[i%colors.length];
+    c.style.animationDuration=(1.1+Math.random()*0.9)+"s";
+    c.style.animationDelay=(Math.random()*0.25)+"s";
+    app.appendChild(c);
+    setTimeout(()=>{ try{ c.remove(); }catch(e){} }, 2500);
+  }
+}
+
+/* ---------------- sound (Web Audio, synthesized; off by default) ---------------- */
+let _audio=null;
+function ensureAudio(){
+  try{
+    if(!_audio) _audio=new (window.AudioContext||window.webkitAudioContext)();
+    if(_audio.state==="suspended") _audio.resume();
+  }catch(e){ _audio=null; }
+  return _audio;
+}
+function beep(freq, dur, type, gain, when){
+  if(!state._sound) return;
+  const ac=ensureAudio(); if(!ac) return;
+  try{
+    const t0=ac.currentTime+(when||0);
+    const o=ac.createOscillator(), g=ac.createGain();
+    o.type=type||"sine"; o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(gain||0.12, t0+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    o.connect(g); g.connect(ac.destination);
+    o.start(t0); o.stop(t0+dur+0.03);
+  }catch(e){}
+}
+const sfx={
+  click(){ beep(520,0.06,"square",0.05); },
+  tick(){ beep(880,0.05,"sine",0.05); },
+  ach(){ beep(880,0.09,"sine",0.10); beep(1175,0.12,"sine",0.10,0.09); },
+  result(pts){ const f=320+(pts/5000)*520; beep(f,0.18,"sine",0.12);
+    if(pts>=4500){ beep(f*1.26,0.18,"sine",0.1,0.13); beep(f*1.5,0.22,"sine",0.1,0.26); } },
+  win(){ [523,659,784,1047].forEach((f,i)=>beep(f,0.2,"triangle",0.11,i*0.12)); }
+};
+
+/* ---------------- achievements ---------------- */
+const ACHIEVEMENTS=[
+  {id:"bullseye",     e:"🎯", t:"Bullseye",      d:"Guess within 1 km"},
+  {id:"perfect",      e:"💯", t:"Perfect",       d:"5000 in a round"},
+  {id:"streak",       e:"🔥", t:"Hot streak",    d:"3 rounds ≥ 4000"},
+  {id:"sharp",        e:"🧭", t:"Sharpshooter",  d:"20,000+ in a game"},
+  {id:"globetrotter", e:"🌍", t:"Globetrotter",  d:"Play 10 games"},
+  {id:"daily",        e:"🗓️", t:"Daily devotee", d:"Play a Daily"}
+];
+function unlock(id){
+  if(store.get("ach_"+id,"")==="1") return;
+  store.set("ach_"+id,"1");
+  const a=ACHIEVEMENTS.find(x=>x.id===id);
+  if(a){ showToast(a.e+" Achievement: "+a.t); haptic("success"); sfx.ach(); }
+}
 
 /* ---------------- Curated, well-covered seed locations ----------------
    We pick a city, jitter it, then ask Mapillary for nearby images, so rounds
@@ -457,8 +575,21 @@ const CITIES = [
   {n:"Nairobi",lat:-1.2921,lon:36.8219,r:"af"}
 ];
 
+const TIPS=[
+  "Road-line colours & markings differ by country — note them before you move.",
+  "Which side of the road is traffic on? It rules out half the world.",
+  "Bollards, utility poles and guardrails are surprisingly country-specific.",
+  "Sun low in the north? You're likely in the southern hemisphere.",
+  "Language on signs and shopfronts is the fastest giveaway.",
+  "License-plate colours and shapes vary by region.",
+  "Vegetation and soil colour hint at climate and latitude.",
+  "Follow the road to a junction — signs there often name a town.",
+  "Google the architecture style in your head: rooflines vary a lot.",
+  "No clue? Drop your pin in the most likely continent for partial points."
+];
+
 const state = {
-  token:"", rounds:5, region:"world", move:"move", timeLimit:0,
+  token:"", rounds:5, endless:false, region:"world", move:"move", timeLimit:0,
   round:0, total:0, history:[],
   trueLatLng:null, guessLatLng:null,
   viewer:null, guessMap:null, guessMarker:null, resultMap:null,
@@ -507,11 +638,12 @@ function wireSeg(id, cb){
   });
 }
 wireSeg("segRegion", v=>{ state.region=v; store.set("opt_region",v); });
-wireSeg("segRounds", v=>{ state.rounds=parseInt(v,10); store.set("opt_rounds",v); });
+wireSeg("segRounds", v=>{ state.endless=(v==="endless"); state.rounds=state.endless?Infinity:parseInt(v,10); store.set("opt_rounds",v); });
 wireSeg("segMove",   v=>{ state.move=v; store.set("opt_move",v); syncDifficulty(); });
 wireSeg("segTime",   v=>{ state.timeLimit=parseInt(v,10); store.set("opt_time",v); syncDifficulty(); });
-wireSeg("segUnits",  v=>{ state._units=v; store.set("opt_units",v); });
-wireSeg("segLabels", v=>{ state._noLabels=(v==="off"); store.set("opt_labels",v); });
+wireSeg("segUnits",   v=>{ state._units=v; store.set("opt_units",v); });
+wireSeg("segBasemap", v=>{ state._basemap=v; store.set("opt_basemap",v); });
+wireSeg("segSound",   v=>{ state._sound=(v==="on"); store.set("opt_sound",v); if(state._sound) ensureAudio(); });
 function selectSeg(id, val){
   const root=$(id); if(!root) return;
   [...root.children].forEach(b=>b.classList.toggle("active", b.dataset.v===String(val)));
@@ -540,12 +672,14 @@ let _startWired=false;
 function initStart(){
   // restore saved settings (from native store or localStorage)
   state.region=store.get("opt_region", state.region);             selectSeg("segRegion", state.region);
-  state.rounds=parseInt(store.get("opt_rounds", state.rounds),10); selectSeg("segRounds", state.rounds);
+  const rv=store.get("opt_rounds", String(state.rounds)); state.endless=(rv==="endless");
+  state.rounds=state.endless?Infinity:parseInt(rv,10); selectSeg("segRounds", rv);
   state.move=store.get("opt_move", state.move);                   selectSeg("segMove", state.move);
   state.timeLimit=parseInt(store.get("opt_time", state.timeLimit),10); selectSeg("segTime", state.timeLimit);
   syncDifficulty();
-  state._units=store.get("opt_units","km");          selectSeg("segUnits", state._units);
-  const lbl=store.get("opt_labels","on"); state._noLabels=(lbl==="off"); selectSeg("segLabels", lbl);
+  state._units=store.get("opt_units","km");           selectSeg("segUnits", state._units);
+  state._basemap=store.get("opt_basemap","map");      selectSeg("segBasemap", state._basemap);
+  const snd=store.get("opt_sound","off"); state._sound=(snd==="on"); selectSeg("segSound", snd);
 
   const saved = store.get("mapillary_token","");
   const pre = tokenLooksValid(saved) ? saved : (tokenLooksValid(INJECTED_TOKEN)?INJECTED_TOKEN:"");
@@ -553,12 +687,23 @@ function initStart(){
 
   const best = parseInt(store.get("best_score","0"),10);
   $("bestLine").textContent = best>0 ? ("Best total so far: "+best.toLocaleString()+" pts") : "";
+  renderDailyStreak();
 
   refreshStartNote();
   if(!_startWired){ _startWired=true; $("tokenInput").addEventListener("input", refreshStartNote); }
 }
 // Re-apply once the native host has pushed saved data (best score, settings, token).
 window.__onNativeReady = function(){ try{ initStart(); }catch(e){} };
+function renderDailyStreak(){
+  const el=$("dailyStreak"); if(!el) return;
+  const last=store.get("daily_last",""), streak=parseInt(store.get("daily_streak","0"),10)||0;
+  const today=new Date().toISOString().slice(0,10);
+  const yest=new Date(Date.parse(today)-86400000).toISOString().slice(0,10);
+  if(streak>0 && (last===today||last===yest)){
+    el.textContent = (last===today) ? ("🔥 "+streak+"-day streak — done today!")
+                                    : ("🔥 "+streak+"-day streak — play today to keep it going!");
+  }else el.textContent="";
+}
 function refreshStartNote(){
   const t=$("tokenInput").value.trim();
   const note=$("startNote");
@@ -572,20 +717,37 @@ function refreshStartNote(){
 }
 
 /* ---------------- game flow ---------------- */
-async function startGame(){
+// seedStr null = normal random game. Otherwise a deterministic seed game with
+// fixed settings (World · 5 rounds · Move) so scores are comparable.
+function launchGame(seedStr){
   const t=$("tokenInput").value.trim();
   if(!tokenLooksValid(t)){ refreshStartNote(); return; }
   state.token=t; store.set("mapillary_token", t);
   nativeCmd("keepawake",{on:1});          // don't dim/sleep while playing
+  if(state._sound) ensureAudio();         // resume audio within this user gesture
 
-  state.round=0; state.total=0; state.history=[]; state._prefetch=null;
+  state.seedMode = !!seedStr;
+  state.seedStr = seedStr || null;
+  if(state.seedMode){ state.region="world"; state.rounds=5; state.endless=false; state.move="move"; state.timeLimit=0; }
+
+  state.round=0; state.total=0; state.history=[]; state._prefetch=null; state._streak=0;
   state._scoreScale = REGION_SCALE[state.region] || 2000;
-  $("hudRegion").textContent=regionLabel(state.region);
+  $("hudRegion").textContent = state.seedMode
+    ? (state.seedStr.indexOf("daily-")===0 ? "Daily" : "Seed")
+    : regionLabel(state.region);
   $("hudMode").textContent=moveLabel(state.move);
   $("hudTimerWrap").style.display = state.timeLimit>0 ? "" : "none";
   ensureMvt();              // start loading the fast-path tile parser in the background
   nextRound();
 }
+function startGame(){ launchGame(null); }
+function startDaily(){ launchGame("daily-" + new Date().toISOString().slice(0,10)); }   // UTC date
+function startSeed(){
+  const s=($("seedInput").value||"").trim().replace(/[^A-Za-z0-9 _-]/g,"").slice(0,40);
+  if(!s){ $("seedInput").focus(); return; }
+  launchGame("seed-"+s);
+}
+function replayGame(){ launchGame(state.seedMode ? state.seedStr : null); }   // same seed replays identically
 
 function cityPool(){
   if(state.region==="world") return CITIES;
@@ -602,11 +764,19 @@ let _mvtLib;   // {VectorTile, Pbf} once loaded, false if unavailable, undefined
 async function ensureMvt(){
   if(_mvtLib!==undefined) return _mvtLib;
   try{
-    const [vt, pbf] = await Promise.all([
-      import("https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@1.3.1/+esm"),
-      import("https://cdn.jsdelivr.net/npm/pbf@3.2.1/+esm")
-    ]);
-    _mvtLib = { VectorTile: vt.VectorTile, Pbf: pbf.default || pbf.Pbf };
+    if(MVT_SRC_B64 !== "__MVT_"+"SRC_B64__"){
+      // Native: import the self-hosted bundle from an in-memory blob (no CDN).
+      const url=URL.createObjectURL(new Blob([atob(MVT_SRC_B64)],{type:"text/javascript"}));
+      try{ const m=await import(url); _mvtLib={ VectorTile:m.VectorTile, Pbf:m.Pbf }; }
+      finally{ URL.revokeObjectURL(url); }
+    }else{
+      // Plain browser (dev preview): load from the CDN as before.
+      const [vt, pbf] = await Promise.all([
+        import("https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@1.3.1/+esm"),
+        import("https://cdn.jsdelivr.net/npm/pbf@3.2.1/+esm")
+      ]);
+      _mvtLib = { VectorTile: vt.VectorTile, Pbf: pbf.default || pbf.Pbf };
+    }
   }catch(e){ _mvtLib = false; }
   return _mvtLib;
 }
@@ -694,6 +864,69 @@ async function findRandomLocation(){
   return await runBatches(probeLocation, 5, lib?2:4, 9000);   // bbox fallback / primary
 }
 
+/* ---------- Daily challenge / shareable seeds ----------
+   A seed deterministically picks the same locations for everyone, so a "Daily
+   Challenge" (seed = the date) or a shared seed code reproduces the same 5 spots.
+   We use a seeded PRNG and probe SEQUENTIALLY (no racing) so the choices are
+   reproducible. Same-day tiles are stable, which is what makes this line up. */
+function hashSeed(str){
+  let h=1779033703 ^ str.length;
+  for(let i=0;i<str.length;i++){ h=Math.imul(h ^ str.charCodeAt(i), 3432918353); h=(h<<13)|(h>>>19); }
+  h=Math.imul(h ^ (h>>>16), 2246822507); h=Math.imul(h ^ (h>>>13), 3266489909);
+  return (h ^ (h>>>16)) >>> 0;
+}
+function makeRng(seed){
+  let a=seed>>>0;
+  return function(){
+    a=(a+0x6D2B79F5)|0;
+    let t=Math.imul(a ^ (a>>>15), 1|a);
+    t=(t+Math.imul(t ^ (t>>>7), 61|t)) ^ t;
+    return ((t ^ (t>>>14))>>>0)/4294967296;
+  };
+}
+// Deterministic single-location finder driven entirely by the seeded rng. The
+// number of rng() draws per attempt is constant so two clients stay in lockstep.
+async function findSeededLocation(rng){
+  const lib=await ensureMvt();
+  for(let attempt=0; attempt<24; attempt++){
+    const pool=cityPool();
+    const city=pool[Math.floor(rng()*pool.length)];
+    const lat=city.lat+(rng()-0.5)*0.06;
+    const lon=city.lon+(rng()-0.5)*0.06;
+    const fpick=rng();                       // draw feature-pick fraction every attempt (kept in sync)
+    try{
+      if(lib){
+        const z=14, t=lngLatToTileXY(lon,lat,z);
+        const url=`https://tiles.mapillary.com/maps/vtp/mly1_public/2/${z}/${t.x}/${t.y}?access_token=${encodeURIComponent(state.token)}`;
+        const res=await fetch(url);
+        if(res.status===401||res.status===403){ const e=new Error("auth"); e.auth=true; throw e; }
+        if(res.ok){
+          const tile=new lib.VectorTile(new lib.Pbf(new Uint8Array(await res.arrayBuffer())));
+          const layer=tile.layers["image"]||tile.layers["overview"];
+          if(layer&&layer.length){
+            const f=layer.feature(Math.floor(fpick*layer.length));
+            const gj=f.toGeoJSON(t.x,t.y,z), id=f.properties&&f.properties.id, c=gj&&gj.geometry&&gj.geometry.coordinates;
+            if(id!=null&&c) return { id:String(id), lng:c[0], lat:c[1], city:city.n };
+          }
+        }
+      }else{
+        const r=0.005, bbox=[lon-r,lat-r,lon+r,lat+r].join(",");
+        const url=`https://graph.mapillary.com/images?access_token=${encodeURIComponent(state.token)}&fields=id,geometry&bbox=${bbox}&limit=10`;
+        const res=await fetch(url);
+        if(res.status===401||res.status===403){ const e=new Error("auth"); e.auth=true; throw e; }
+        if(res.ok){
+          const data=await res.json(), feats=(data&&!data.error&&data.data)||[];
+          if(feats.length){
+            const pick=feats[Math.floor(fpick*feats.length)], g=pick.geometry&&pick.geometry.coordinates;
+            if(g) return { id:pick.id, lng:g[0], lat:g[1], city:city.n };
+          }
+        }
+      }
+    }catch(err){ if(err.auth) throw err; }
+  }
+  return null;
+}
+
 async function nextRound(){
   state.round++;
   state._rerolls=0;
@@ -701,10 +934,11 @@ async function nextRound(){
 }
 
 // While the player is guessing/seeing results, quietly look up the NEXT round's
-// location so "Next round" loads instantly. No-op on the final round.
+// location so "Next round" loads instantly. No-op on the final round or in seed
+// mode (seed games are found deterministically, not prefetched).
 function prefetchNextLocation(){
   state._prefetch=null;
-  if(state.round>=state.rounds) return;
+  if(state.seedMode || state.round>=state.rounds) return;
   findRandomLocation().then(loc=>{ state._prefetch=loc; }).catch(()=>{ state._prefetch=null; });
 }
 
@@ -718,17 +952,22 @@ async function loadRoundLocation(){
   $("hud").classList.add("hidden");
   $("guessPanel").classList.add("hidden");
   $("mapFab").classList.remove("show");
+  $("btnSkip").style.display = state.seedMode ? "none" : "";   // no skipping in a fair seed game
   $("loadingText").textContent = (state._rerolls>0) ? "Skipping a bad spot…" : "Finding you a place in the world…";
   $("loadingSub").textContent="Round "+state.round+" of "+state.rounds;
+  $("loadingTip").textContent="💡 "+TIPS[Math.floor(Math.random()*TIPS.length)];
 
   let loc=null;
-  if(state._prefetch){ loc=state._prefetch; state._prefetch=null; }   // instant: prepared last round
-  else{
-    try{ loc=await findRandomLocation(); }
-    catch(err){
-      if(err.auth){ backToStartWithError("Your Mapillary token was rejected (401/403). Double-check it and try again."); return; }
-      loc=null;
-    }
+  try{
+    if(state.seedMode){
+      // Deterministic: same seed + round (+ reroll) -> same location for everyone.
+      const rng=makeRng(hashSeed(state.seedStr+":"+state.round+":"+(state._rerolls||0)));
+      loc=await findSeededLocation(rng);
+    }else if(state._prefetch){ loc=state._prefetch; state._prefetch=null; }   // instant: prepared last round
+    else{ loc=await findRandomLocation(); }
+  }catch(err){
+    if(err.auth){ backToStartWithError("Your Mapillary token was rejected (401/403). Double-check it and try again."); return; }
+    loc=null;
   }
   if(!loc){
     $("loadingText").textContent="Couldn't find coverage — retrying…";
@@ -749,8 +988,11 @@ async function loadRoundLocation(){
   $("guessPanel").classList.remove("collapsed");
   $("mapFab").classList.remove("show");
 
-  $("hudRound").textContent=state.round+" / "+state.rounds;
+  $("hudRound").textContent = state.endless ? ("Round "+state.round) : (state.round+" / "+state.rounds);
   $("hudScore").textContent=state.total.toLocaleString();
+  $("hudAvgWrap").style.display = state.endless ? "" : "none";
+  $("hudAvg").textContent = state.round>1 ? Math.round(state.total/(state.round-1)).toLocaleString() : "0";
+  $("btnEnd").style.display = (state.endless && !state.seedMode) ? "" : "none";
   $("hud").classList.remove("hidden");
   $("guessPanel").classList.remove("hidden");
   setGuessReady(false);
@@ -836,11 +1078,17 @@ function setupGuessMap(){
   $("guessMap").innerHTML="";
   const map=L.map("guessMap",{worldCopyJump:true,zoomControl:true,attributionControl:true,
             minZoom:1, maxZoom:18}).setView([30,0],1);
-  const style = state._noLabels ? "rastertiles/voyager_nolabels" : "rastertiles/voyager";
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/"+style+"/{z}/{x}/{y}{r}.png",{
-    maxZoom:19, subdomains:"abcd", keepBuffer:6, updateWhenZooming:false,
-    attribution:'&copy; OpenStreetMap &copy; CARTO'
-  }).addTo(map);
+  if(state._basemap==="sat"){
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{
+      maxZoom:19, keepBuffer:6, updateWhenZooming:false, attribution:'Imagery &copy; Esri'
+    }).addTo(map);
+  }else{
+    const style = state._basemap==="plain" ? "rastertiles/voyager_nolabels" : "rastertiles/voyager";
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/"+style+"/{z}/{x}/{y}{r}.png",{
+      maxZoom:19, subdomains:"abcd", keepBuffer:6, updateWhenZooming:false,
+      attribution:'&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(map);
+  }
   map.on("click", e=>{
     const ll=e.latlng;
     state.guessLatLng={lat:ll.lat, lng:ll.lng};
@@ -848,6 +1096,7 @@ function setupGuessMap(){
       state.guessMarker=L.marker(ll,{draggable:true}).addTo(map);
       state.guessMarker.on("dragend", ()=>{ const p=state.guessMarker.getLatLng(); state.guessLatLng={lat:p.lat,lng:p.lng}; });
     }else{ state.guessMarker.setLatLng(ll); }
+    sfx.click();
     setGuessReady(true);
   });
   state.guessMap=map;
@@ -877,6 +1126,7 @@ function startTimer(){
   renderTimer();
   state.timer=setInterval(()=>{
     state.timeLeft--; renderTimer();
+    if(state.timeLeft<=5 && state.timeLeft>0) sfx.tick();
     if(state.timeLeft<=0){ clearInterval(state.timer); submitGuess(true); }
   },1000);
 }
@@ -889,6 +1139,13 @@ function renderTimer(){
 function statBump(key, delta){ store.set(key, String((parseFloat(store.get(key,"0"))||0)+delta)); }
 function statMax(key, val){ if(val>(parseFloat(store.get(key,"0"))||0)) store.set(key, String(val)); }
 function statMin(key, val){ const c=store.get(key,""); if(c===""||val<parseFloat(c)) store.set(key, String(val)); }
+// Per-region breakdown, kept as one JSON blob: { <region>:{n:rounds,p:points,b:bestRound} }.
+function getRegionStats(){ try{ return JSON.parse(store.get("st_regions","{}"))||{}; }catch(e){ return {}; } }
+function bumpRegion(r, pts){
+  const m=getRegionStats(); const o=m[r]||{n:0,p:0,b:0};
+  o.n++; o.p+=pts; if(pts>o.b) o.b=pts; m[r]=o;
+  store.set("st_regions", JSON.stringify(m));
+}
 
 /* ---------------- guessing / result ---------------- */
 function submitGuess(auto){
@@ -908,9 +1165,19 @@ function submitGuess(auto){
   statBump("st_points",pts);
   statMax("st_bestround",pts);
   if(state.guessLatLng) statMin("st_closest",km);
+  bumpRegion(state.region, pts);   // Daily/Seed force region="world", so they bucket there
+  if(state.endless) $("hudAvg").textContent = Math.round(state.total/state.round).toLocaleString();
+
+  // per-round achievements + hot-streak tracking
+  if(state.guessLatLng && km<1) unlock("bullseye");
+  if(pts>=5000) unlock("perfect");
+  state._streak = (pts>=4000) ? (state._streak||0)+1 : 0;
+  if(state._streak>=3) unlock("streak");
 
   haptic(pts>=4000 ? "success" : "click");      // buzz on guess (stronger for a great one)
+  sfx.result(pts);
   showResult(km, pts, !!state.guessLatLng);
+  if(pts>=4500) confettiBurst();                 // celebrate a great guess
   prefetchNextLocation();        // get the next spot ready while the result is up
 }
 
@@ -957,8 +1224,17 @@ function buildResultMap(trueLL, guessLL, guessed){
   }
 }
 
+function countUp(el, target){
+  clearInterval(el._ct);
+  const start=performance.now(), dur=700;
+  el._ct=setInterval(()=>{
+    const t=Math.min(1,(performance.now()-start)/dur);
+    el.textContent=Math.round(target*t).toLocaleString();
+    if(t>=1){ clearInterval(el._ct); el.textContent=target.toLocaleString(); }
+  },30);
+}
 function fillResultUI(km, pts, guessed, trueLL){
-  $("resPts").textContent=pts.toLocaleString();
+  countUp($("resPts"), pts);
   $("resDist").textContent = guessed ? ("Your guess was "+fmtDist(km)+" away") : "No guess placed — 0 points";
   showAnswerPlace(trueLL.lat, trueLL.lng);
   const pct=Math.max(2, Math.round(pts/5000*100));
@@ -998,9 +1274,12 @@ function finishGame(){
   $("hud").classList.add("hidden");
   $("guessPanel").classList.add("hidden");
   $("mapFab").classList.remove("show");
-  const max=state.rounds*5000;
+  const played=state.history.length;
+  const max=state.endless ? played*5000 : state.rounds*5000;
   $("finalScore").textContent=state.total.toLocaleString();
-  $("finalOf").textContent="out of "+max.toLocaleString();
+  $("finalOf").textContent = state.endless
+    ? ("across "+played+" round"+(played===1?"":"s")+" · avg "+(played?Math.round(state.total/played).toLocaleString():"0"))
+    : ("out of "+max.toLocaleString());
 
   const bd=$("finalBreakdown"); bd.innerHTML="";
   state.history.forEach((h,idx)=>{
@@ -1011,19 +1290,59 @@ function finishGame(){
     bd.appendChild(row);
   });
 
+  // "Best game" tracks fixed-length games only — an endless run can rack up an
+  // unbounded total, so it shouldn't overwrite the best.
   const best=parseInt(store.get("best_score","0"),10);
-  if(state.total>best){ store.set("best_score", String(state.total));
-    $("finalBest").textContent="🏆 New best score!"; haptic("success");
+  if(!state.endless && state.total>best){ store.set("best_score", String(state.total));
+    $("finalBest").textContent="🏆 New best score!"; haptic("success"); confettiBurst(); sfx.win();
   }else{
     $("finalBest").textContent="Best: "+best.toLocaleString()+" pts";
   }
+
+  // game-level achievements
+  const games=parseInt(store.get("st_games","0"),10)||0;
+  if(state.total>=20000) unlock("sharp");
+  if(games>=10) unlock("globetrotter");
+  if(state.seedMode && state.seedStr.indexOf("daily-")===0) unlock("daily");
+
+  // recent-games log (keep last 10)
+  let rg=[]; try{ rg=JSON.parse(store.get("recent_games","[]"))||[]; }catch(e){}
+  rg.push({ d:new Date().toISOString().slice(0,10), s:state.total, m:max,
+    mode: state.endless ? "Endless"
+        : state.seedMode ? (state.seedStr.indexOf("daily-")===0?"Daily":"Seed")
+        : regionLabel(state.region) });
+  store.set("recent_games", JSON.stringify(rg.slice(-10)));
+
+  // daily streak: count consecutive UTC days a Daily Challenge was completed
+  if(state.seedMode && state.seedStr.indexOf("daily-")===0){
+    const today=state.seedStr.slice(6), last=store.get("daily_last","");
+    if(last!==today){
+      const yest=new Date(Date.parse(today)-86400000).toISOString().slice(0,10);
+      const cur=parseInt(store.get("daily_streak","0"),10)||0;
+      store.set("daily_streak", String(last===yest ? cur+1 : 1));
+      store.set("daily_last", today);
+    }
+  }
+
+  const seedEl=$("finalSeed");
+  if(state.seedMode){
+    const code=state.seedStr.replace(/^daily-/,"Daily ").replace(/^seed-/,"Seed ");
+    seedEl.textContent="🔗 "+code+" · share it so others get the same 5 spots";
+    seedEl.style.display="";
+  }else{ seedEl.style.display="none"; }
   showScreen("final");
 }
 
 function shareResults(){
   const max=state.rounds*5000;
-  const text=`I scored ${state.total.toLocaleString()} / ${max.toLocaleString()} in geoClaudr! 🌍 `+
-             `(${state.rounds} rounds · ${regionLabel(state.region)})`;
+  let text=`I scored ${state.total.toLocaleString()} / ${max.toLocaleString()} in geoClaudr! 🌍`;
+  if(state.seedMode){
+    const isDaily=state.seedStr.indexOf("daily-")===0;
+    const code=state.seedStr.replace(/^daily-/,"").replace(/^seed-/,"");
+    text += isDaily ? ` — Daily Challenge ${code}` : ` — play my seed code: ${code}`;
+  }else{
+    text += ` (${state.rounds} rounds · ${regionLabel(state.region)})`;
+  }
   if(window.__NATIVE){ nativeCmd("share",{text:text}); return; }       // native share sheet
   if(navigator.share){ navigator.share({title:"geoClaudr", text:text}).catch(()=>{}); return; }
   try{ navigator.clipboard.writeText(text);
@@ -1064,12 +1383,40 @@ function renderStats(){
     statRow("Best game", bestGame ? bestGame.toLocaleString() : "—")+
     statRow("Best round", bestRound ? bestRound.toLocaleString()+" / 5000" : "—")+
     statRow("Closest guess ever", closestRaw!=="" ? fmtDist(parseFloat(closestRaw)) : "—");
+
+  // per-region breakdown (avg / best round), only for regions actually played
+  const rstats=getRegionStats();
+  const rRows=["world","eu","na","as"].filter(r=>rstats[r]&&rstats[r].n>0).map(r=>{
+    const o=rstats[r];
+    return `<div class="r"><span class="n">${regionLabel(r)}</span>`+
+           `<span class="d">avg ${Math.round(o.p/o.n).toLocaleString()}</span>`+
+           `<span class="p">best ${o.b.toLocaleString()}</span></div>`;
+  }).join("");
+  $("statsRegions").innerHTML = rRows ||
+    `<div class="r"><span class="n" style="color:var(--muted)">No regional data yet</span></div>`;
+
+  // achievements
+  $("statsAchievements").innerHTML = ACHIEVEMENTS.map(a=>{
+    const on = store.get("ach_"+a.id,"")==="1";
+    return `<div class="ach${on?" on":""}"><div class="e">${a.e}</div><div class="t">${a.t}</div><div class="d">${a.d}</div></div>`;
+  }).join("");
+
+  // recent games
+  let rg=[]; try{ rg=JSON.parse(store.get("recent_games","[]"))||[]; }catch(e){}
+  $("statsRecent").innerHTML = rg.length
+    ? rg.slice().reverse().map(g=>
+        `<div class="r"><span class="n">${g.d}</span><span class="d">${g.mode||""}</span>`+
+        `<span class="p">${(g.s||0).toLocaleString()}</span></div>`).join("")
+    : `<div class="r"><span class="n" style="color:var(--muted)">No games yet</span></div>`;
 }
 function openStats(){ renderStats(); showScreen("stats"); }
 let _resetArmed=false;
 function resetStats(){
   ["st_games","st_rounds","st_points","st_bestround","best_score"].forEach(k=>store.set(k,"0"));
   store.set("st_closest","");
+  store.set("st_regions","{}");
+  store.set("recent_games","[]");
+  ACHIEVEMENTS.forEach(a=>store.set("ach_"+a.id,"0"));
   renderStats();
   initStart();   // refresh the "best so far" line too
 }
@@ -1078,7 +1425,10 @@ function resetStats(){
 $("playBtn").addEventListener("click", startGame);
 $("guessBtn").addEventListener("click", ()=>submitGuess(false));
 $("nextBtn").addEventListener("click", nextOrFinish);
-$("againBtn").addEventListener("click", startGame);
+$("againBtn").addEventListener("click", replayGame);
+$("dailyBtn").addEventListener("click", startDaily);
+$("seedBtn").addEventListener("click", startSeed);
+$("seedInput").addEventListener("keydown", e=>{ if(e.code==="Enter"||e.code==="NumpadEnter"){ e.preventDefault(); startSeed(); } });
 $("homeBtn").addEventListener("click", backToStart);
 $("shareBtn").addEventListener("click", shareResults);
 $("statsBtn").addEventListener("click", openStats);
@@ -1098,6 +1448,11 @@ $("btnReturn").addEventListener("click", ()=>{
   if(state.viewer && state._startImageId){ try{ state.viewer.moveTo(state._startImageId); }catch(e){} }
 });
 $("btnSkip").addEventListener("click", ()=>{ state._rerolls=0; loadRoundLocation(); });
+$("btnEnd").addEventListener("click", ()=>{
+  clearInterval(state.timer);
+  if(state.history.length===0){ backToStart(); return; }   // nothing played yet — don't log an empty game
+  finishGame();
+});
 $("panelToggle").addEventListener("click", (e)=>{
   e.stopPropagation();
   $("guessPanel").classList.toggle("expanded");
@@ -1152,6 +1507,14 @@ document.addEventListener("keydown", e=>{
   const map={KeyW:"StepForward",KeyS:"StepBackward",KeyA:"StepLeft",KeyD:"StepRight"};
   const nav=map[e.code]; if(!nav) return;
   e.preventDefault(); moveInDir(nav);
+});
+
+// Enter: submit a ready guess, or advance from the result screen.
+document.addEventListener("keydown", e=>{
+  if(e.code!=="Enter" && e.code!=="NumpadEnter") return;
+  const tag=(e.target&&e.target.tagName)||""; if(tag==="INPUT"||tag==="TEXTAREA") return;
+  if($("result").classList.contains("show")){ e.preventDefault(); nextOrFinish(); return; }
+  if(!document.querySelector(".overlay.show") && !$("guessBtn").disabled){ e.preventDefault(); submitGuess(false); }
 });
 
 /* ---------------- boot ---------------- */
